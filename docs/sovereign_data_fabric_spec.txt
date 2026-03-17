@@ -1,0 +1,26 @@
+# FILE: sovereign_data_fabric_spec.md
+# PROJECT: Project Iskander
+# COMPONENT: Mesh Archive (Distributed Data Sovereignty)
+# VERSION: 0.2-FINAL
+
+## 1. MISSION STATEMENT
+To implement a distributed, content-addressed archive using IPFS for storage and Web3 Identity (SBT/EVM) for access control, ensuring the "Glass Box" rationale is immutable and permissioned correctly.
+
+## 2. INTEGRATION STRATEGY
+- **Content Storage:** IPFS (CID-based).
+- **Access Control:** Gated by the existing Soulbound Identity layer. Decryption keys/authorization checks are bound to the node's EVM wallet ownership.
+- **Verification:** The "Glass Box" log CID is stored on-chain (or in a Merkle tree) to ensure the data has not been tampered with since the agent generated the rationale.
+
+## 3. CORE LOGIC
+- **Event Pinning:** When an agent generates a `CausalEvent`, the OS:
+    1. Encrypts the payload for the target audience (Federation-Wide vs. Council-Only).
+    2. Pins the encrypted blob to the local IPFS node.
+    3. Broadcasts the CID and the event-signature to the federation mesh.
+- **Access Resolution:** When a node attempts to read a remote CID:
+    1. The node validates the requester's `gSBT` (Governance Soulbound Token).
+    2. If authorized, the decryption key is derived from the node’s wallet/identity.
+
+## 4. IMMEDIATE IMPLEMENTATION STEPS
+1. **IPFS Wrapper:** Create a `SovereignStorage` module.
+2. **Access Middleware:** Implement a decorator `@requires_access(token_type='steward')` that checks the node's wallet for the required SBT before executing `ipfs.cat(cid)`.
+3. **Synchronization:** Ensure the `Delta-Sync` protocol respects these permissions (only sync CIDs you are authorized to read).

@@ -1,0 +1,55 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  Iskander Hearth — Tier 2 Chassis Thermal CFD
+  OpenFOAM v2312 | Air thermophysical properties
+
+  Working fluid: dry air at ~1 atm, 300K (27°C ambient)
+  Model: incompressible ideal gas (rho = p/(R*T)) — valid at low Mach
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      thermophysicalProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+thermoType
+{
+    type            heRhoThermo;       // Density-based energy thermo
+    mixture         pureMixture;
+    transport       const;             // Constant dynamic viscosity + Pr
+    thermo          hConst;            // Constant specific heat Cp
+    equationOfState perfectGas;        // rho = p/(R*T)
+    specie          specie;
+    energy          sensibleEnthalpy;
+}
+
+mixture
+{
+    // Air molecular weight and gas constant
+    specie
+    {
+        molWeight   28.9;              // g/mol — dry air
+    }
+
+    thermodynamics
+    {
+        Cp          1005;              // J/(kg·K) — at 300K
+        Hf          0;
+    }
+
+    transport
+    {
+        mu          1.84e-5;           // kg/(m·s) — dynamic viscosity at 300K
+        Pr          0.713;             // Prandtl number — air at 300K
+    }
+}
+
+// ── Operating pressure ────────────────────────────────────────────────────────
+// Used by perfectGas EoS for density: rho = pRef/(R*T)
+// Variations in p_rgh around pRef are the dynamic pressure fluctuations.
+pRef            101325;                // Pa — standard atmosphere
+
+// ************************************************************************* //

@@ -1,0 +1,56 @@
+<?xml version="1.0"?>
+<!--
+  Iskander Hearth — Tier 2 Thermal CFD ParaView State
+  ParaView 5.12+ | OpenFOAM v2312 case results visualization
+
+  STUB: This file must be saved from ParaView after loading the completed
+  simulation results. The instructions below describe the required visualization
+  state for reproducible post-processing.
+
+  To generate this file:
+  1. Open ParaView 5.12+
+  2. File → Open → select hearth_t2_thermal/ (OpenFOAM reader)
+  3. Configure the views described below
+  4. File → Save State → save as paraview_state.pvsm
+
+  ── Required visualization elements ──────────────────────────────────────────
+
+  View 1: Temperature field (RenderView)
+    - Data: T field, volume rendering or surface LIC
+    - Colormap: Cool-to-Warm (blue 300K → red 360K)
+    - Range: [300, 360] K — shows 60K dynamic range for this geometry
+    - Annotation: colorbar with Kelvin label
+    - Camera: isometric view, chassis slightly tilted to show top+front+side
+
+  View 2: Velocity streamlines (RenderView, same or split)
+    - Data: U field, streamline seeds from intake_fan patch
+    - Integration: Runge-Kutta 45, step size 0.005m
+    - Tube representation: radius 0.002m, colored by U magnitude
+    - Colormap: sequential blue (0 m/s) → red (3 m/s)
+
+  View 3: GPU/CPU surface temperature (SpreadSheetView or LineChartView)
+    - Data: surfaceFieldValue function object output (gpu_surface_T, cpu_surface_T)
+    - Shows convergence of average surface temperature vs iteration number
+    - Pass/fail annotation: horizontal line at 356K (83°C — acceptance threshold)
+
+  View 4: Residual plot (LineChartView)
+    - Data: postProcessing/residuals/0/solverInfo.dat
+    - Fields: U_Ux, U_Uy, U_Uz, p_rgh, T, k, omega
+    - Y axis: log scale
+    - Convergence target line: 1e-4 (dashed red horizontal)
+
+  ── Key result annotations ────────────────────────────────────────────────────
+
+  Add the following text annotations to View 1:
+    "GPU surface T_avg = [value] K ([value-273.15] °C)"
+    "CPU surface T_avg = [value] K ([value-273.15] °C)"
+    "Intake velocity = 2.5 m/s | GPU heat flux = 4250 W/m²"
+    "PASS: GPU < 356K (83°C)" or "FAIL: GPU ≥ 356K"
+
+  ── Reproducibility note ──────────────────────────────────────────────────────
+
+  After generating, commit paraview_state.pvsm to the repository.
+  Any team member with ParaView 5.12+ and the case results can exactly
+  reproduce the visualization by loading this state file.
+-->
+<PVSMFile version="5.12" />

@@ -1,0 +1,9 @@
+# KiCad footprint library directory
+# Format: *.kicad_mod files
+# Custom footprints for components not in KiCad standard libraries:
+#   - SW_DPST_PanelMount_M12.kicad_mod  (SW1, SW2, SW3 panel cutout + flying-lead pads)
+#   - Conn_USB2_Internal_9pin.kicad_mod  (J2 in-line USB header pair)
+#   - JST_XH_B3B-XH-A.kicad_mod         (if not in KiCad Connector_JST library)
+#
+# All standard-library footprints (INA3221 SOIC-14, ATECC608B SOIC-8, etc.)
+# are pulled from KiCad built-in Package_SO library — no custom footprint needed.

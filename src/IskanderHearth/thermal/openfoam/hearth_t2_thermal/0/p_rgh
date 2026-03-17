@@ -1,0 +1,67 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  Iskander Hearth — Tier 2 Chassis Thermal CFD
+  OpenFOAM v2312 | Modified pressure p_rgh = p - rho*g*h
+
+  p_rgh is the working pressure variable in buoyantSimpleFoam.
+  Gauge reference: p_rgh = 0 at exhaust outlet (standard for SIMPLE).
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      p_rgh;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [1 -1 -2 0 0 0 0];   // Pa
+
+internalField   uniform 0;
+
+boundaryField
+{
+    // ── Inlet: zero gradient ──────────────────────────────────────────────────
+    // Pressure is determined by the velocity BC at intake
+    intake_fan
+    {
+        type        fixedFluxPressure;
+        gradient    uniform 0;
+        value       uniform 0;
+    }
+
+    // ── Outlet: fixed reference pressure ─────────────────────────────────────
+    exhaust_fan
+    {
+        type        prghPressure;
+        p           uniform 0;
+        value       uniform 0;
+    }
+
+    front_vents
+    {
+        type        prghPressure;
+        p           uniform 0;
+        value       uniform 0;
+    }
+
+    gpu_vent_slots
+    {
+        type        prghPressure;
+        p           uniform 0;
+        value       uniform 0;
+    }
+
+    // ── Walls: fixed flux (zero normal gradient) ──────────────────────────────
+    gpu_surface    { type fixedFluxPressure; gradient uniform 0; value uniform 0; }
+    cpu_surface    { type fixedFluxPressure; gradient uniform 0; value uniform 0; }
+    chassis_walls  { type fixedFluxPressure; gradient uniform 0; value uniform 0; }
+    front_panel    { type fixedFluxPressure; gradient uniform 0; value uniform 0; }
+    rear_panel     { type fixedFluxPressure; gradient uniform 0; value uniform 0; }
+    left_panel     { type fixedFluxPressure; gradient uniform 0; value uniform 0; }
+    right_panel    { type fixedFluxPressure; gradient uniform 0; value uniform 0; }
+    bottom_panel   { type fixedFluxPressure; gradient uniform 0; value uniform 0; }
+    top_panel      { type fixedFluxPressure; gradient uniform 0; value uniform 0; }
+}
+
+// ************************************************************************* //

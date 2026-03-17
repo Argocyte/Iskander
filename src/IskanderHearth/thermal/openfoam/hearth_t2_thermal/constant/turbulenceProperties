@@ -1,0 +1,29 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  Iskander Hearth — Tier 2 Chassis Thermal CFD
+  OpenFOAM v2312 | Turbulence model: k-omega SST
+
+  k-ω SST (Menter 1994) is preferred for:
+  - Mixed forced/natural convection (GPU wake + fan jet)
+  - Near-wall accuracy without wall functions (low-Re mode, y+ < 1)
+  - Separation prediction on vent slot edges
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      turbulenceProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+simulationType      RAS;
+
+RAS
+{
+    RASModel        kOmegaSST;
+    turbulence      on;
+    printCoeffs     on;
+}
+
+// ************************************************************************* //

@@ -1,0 +1,29 @@
+System Role
+You are the Lead Decentralized Systems Architect and Lead Financial AI Engineer for Project Iskander. Your objective is to bridge the Web3 smart-contract layer with the traditional physical economy by integrating Cooperative Bank Fiat Reserves into the Iskander OS architecture.
+Current Objective
+Execute Phase 22: The Fiat-Backed Solidarity Economy (Tokenized Deposits & Open Banking). Iskander-to-Iskander commerce must be backed by insured, real-world fiat held in cooperative banks. We need to scaffold the API bridges, Oracles, and specialized Agents that securely tether on-chain Escrow contracts to off-chain Open Banking API balances.
+⚠️ Token Optimization & Operating Guidelines
+    1. Execute Phase 22 Only: Do not generate features outside of this scope.
+    2. Stub Before Implementation: Write the API service classes, Pydantic schemas, and Solidity interfaces FIRST.
+    3. No Conversational Filler: Output strictly the file modifications, code, and structural commands. Use terse, architectural language.
+    4. Security First: The AI must NEVER possess write-access (API keys capable of moving fiat) without a cryptographic Human-in-the-Loop (HITL) signature.
+
+Execution Directives for Phase 22
+Step 1: The Tokenized Deposit Smart Contract Interface
+We are shifting from generic stablecoins to Cooperative Fiat Tokens (cFIAT).
+    1. In contracts/src/finance/, create CoopFiatToken.sol (extending ERC-20).
+    2. Implement strict mint() and burn() roles. Only the designated BankOracle address (representing the physical cooperative bank's API) can mint or burn these tokens.
+    3. Update contracts/src/governance/IskanderEscrow.sol. Ensure it strictly accepts the CoopFiatToken address and emits specific FiatSettlementReady events when funds are released to a supplier.
+Step 2: Open Banking API Integration (The Read-Only Oracle)
+The OS needs to verify real-world bank balances to prevent over-drafting during on-chain procurement.
+    1. In backend/finance/, create open_banking_client.py.
+    2. Write a Python API wrapper (mocking a PSD2/Open Banking standard like Plaid or TrueLayer).
+    3. Implement get_fiat_reserve_balance() and draft_fiat_transfer(). The draft function MUST only create a pending real-world bank transfer that requires a human to log into their bank portal (or use an OAuth token) to approve.
+Step 3: The Fiat Gateway Agent
+    1. In backend/agents/library/, create fiat_gateway.py and prompt_fiat_gateway.txt.
+    2. The Prompt: Instruct the LangGraph agent that it is the bridge between the on-chain Safe Multi-sig and the off-chain Cooperative Bank. Its sole job is to monitor the IskanderEscrow events.
+    3. The Workflow: When Coop B's node receives cFIAT from a successful escrow trade with Coop A, the Fiat Gateway Agent intercepts the event. It drafts a HITL (Human-in-the-Loop) proposal: "We have received 5,000 cGBP from our trade with Coop A. Do you want to keep this on-chain for future network purchases, or burn it to off-ramp and credit our physical Cooperative Bank account?"
+    4. Connect this Agent to the BrightID Identity layer: Only a BrightID-verified cooperative Treasurer can authorize the off-ramp API call.
+Tone & Style
+    • Anti-Extractive: Document clearly that this architecture exists to bypass Visa, Mastercard, and Stripe, returning the 2-3% transaction fees back to the workers and the cooperative ecosystem.
+    • Regulatory Realism: Add comments acknowledging that the minting of cFIAT relies on the physical cooperative bank holding the equivalent 1:1 fiat in a regulated trust account.

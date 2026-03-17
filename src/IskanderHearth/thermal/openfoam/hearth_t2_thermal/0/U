@@ -1,0 +1,84 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  Iskander Hearth — Tier 2 Chassis Thermal CFD
+  OpenFOAM v2312 | Velocity field (initial + boundary conditions)
+
+  Intake fan: Noctua NF-A12x25 at operating point
+    Volume flow: 102.1 m³/h = 0.02836 m³/s
+    Fan clear area (d=115mm): π×(0.0575)² = 0.01039 m²
+    Inlet velocity: 0.02836 / 0.01039 ≈ 2.73 m/s (use 2.5 m/s for conservatism)
+    Direction: -Z (downward, fan blows into chassis)
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volVectorField;
+    location    "0";
+    object      U;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 1 -1 0 0 0 0];   // m/s
+
+internalField   uniform (0 0 0);    // Quiescent start
+
+boundaryField
+{
+    // ── Intake fan: fixed velocity inlet ─────────────────────────────────────
+    // Direction: into chassis (downward in Z)
+    // 2.5 m/s is conservative operating point; full speed = 2.73 m/s
+    intake_fan
+    {
+        type        fixedValue;
+        value       uniform (0 0 -2.5);
+    }
+
+    // ── Exhaust fan: pressure outlet ──────────────────────────────────────────
+    // zeroGradient with inletOutlet on p_rgh handles reverse flow robustly
+    exhaust_fan
+    {
+        type        pressureInletOutletVelocity;
+        value       uniform (0 0 0);
+    }
+
+    // ── Front panel vents (passive intake) ───────────────────────────────────
+    // Pressure boundary — air enters driven by fan-induced depression
+    front_vents
+    {
+        type        pressureInletOutletVelocity;
+        value       uniform (0 0 0);
+    }
+
+    // ── GPU vent slots (left panel exhaust) ───────────────────────────────────
+    gpu_vent_slots
+    {
+        type        pressureInletOutletVelocity;
+        value       uniform (0 0 0);
+    }
+
+    // ── All solid walls: no-slip ──────────────────────────────────────────────
+    gpu_surface
+    {
+        type        noSlip;
+    }
+
+    cpu_surface
+    {
+        type        noSlip;
+    }
+
+    chassis_walls
+    {
+        type        noSlip;
+    }
+
+    // blockMesh remnant patches
+    front_panel   { type noSlip; }
+    rear_panel    { type noSlip; }
+    left_panel    { type noSlip; }
+    right_panel   { type noSlip; }
+    bottom_panel  { type noSlip; }
+    top_panel     { type noSlip; }
+}
+
+// ************************************************************************* //

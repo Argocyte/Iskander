@@ -1,0 +1,62 @@
+field,type,description,pass_criteria,notes
+node_serial,string,Node serial number (IH-T2-YYYYMMDD-NNN),,Format: IH + tier + date + sequence
+builder_coop_id,string,Builder cooperative identifier,,
+build_date,date,Build completion date (YYYY-MM-DD),,
+tier,integer,Node tier (1/2/3),,
+os_version_flashed,string,Iskander OS version or git commit hash,,
+os_checksum_verified,boolean,OS image SHA256 verified before flash,TRUE,Prevents corrupted OS shipping
+,,HARDWARE CHECKS,,
+cpu_stress_pass,boolean,CPU stress test 10 minutes (stress-ng),TRUE,0 errors / 0 timeouts
+ram_memtest_pass,boolean,memtest86 single pass (or memtester 90% RAM 1 pass),TRUE,0 errors
+gpu_burn_pass,boolean,gpu-burn 5 minutes,TRUE,GPU temp < 83°C; 0 compute errors
+nvme_smart_ok,boolean,NVMe SMART status (nvme smart-log),TRUE,No critical warnings; reallocated_sectors = 0
+uefi_secure_boot_enrolled,boolean,Iskander OS signing key enrolled in UEFI,TRUE,
+,,SOLIDARITY HAT CHECKS,,
+tpm_detected,boolean,ATECC608B responds at I2C 0x60,TRUE,i2cdetect -y 1 shows 0x60
+ina3221_detected,boolean,INA3221 responds at I2C 0x40,TRUE,i2cdetect -y 1 shows 0x40
+atecc608b_provisioned,boolean,Provisioning record exists at /etc/iskander/atecc_provisioning.json,TRUE,
+kill_switches_continuity,boolean,All 3 kill switches verified open-circuit when OFF,TRUE,Continuity tester; SW1 SW2 SW3
+kill_switch_mic_gpio,boolean,GPIO5 reads HIGH when SW1 active,TRUE,gpioget gpiochip0 5
+kill_switch_wifi_gpio,boolean,GPIO17 reads HIGH when SW2 active,TRUE,
+kill_switch_gpu_gpio,boolean,GPIO27 reads HIGH when SW3 active,TRUE,
+sovereignty_daemon_running,boolean,hearth-sovereignty.service active,TRUE,systemctl is-active hearth-sovereignty
+permacomputing_daemon_running,boolean,hearth-permacomputing.service active,TRUE,
+ina3221_reads_voltage,boolean,INA3221 CLI smoke test returns plausible voltage (> 0V on CH2),TRUE,python3 ina3221_poller.py
+,,GLASS BOX UX CHECKS,,
+neopixel_startup,boolean,NeoPixel strip shows rainbow sweep on boot (all 30 LEDs),TRUE,Visual inspection
+led_daemon_running,boolean,hearth-leds.service active,TRUE,
+button_daemon_running,boolean,hearth-buttons.service active,TRUE,
+veto_button_gpio,boolean,GPIO5 reads 0 when Veto button pressed,TRUE,
+sign_button_gpio,boolean,GPIO6 reads 0 when Sign button pressed,TRUE,
+veto_led_illuminated,boolean,Red LED lights in Veto button body,TRUE,
+sign_led_illuminated,boolean,Green LED lights in Sign button body,TRUE,
+,,POWER / UPS,,
+ups_nut_detected,boolean,UPS detected by NUT (upsc <upsname>),TRUE,
+ups_on_battery_test,boolean,UPS battery test passes (upscmd instcmd.test.battery),TRUE,
+graceful_degrade_test_pass,boolean,Simulated low-voltage triggers LOW_POWER LED state,TRUE,Manually inject low voltage test or env var mock
+,,NETWORK,,
+ethernet_link_up,boolean,Ethernet link detected (ip link show),TRUE,
+activitypub_router_online,boolean,ActivityPub router responds on :8080,TRUE,curl -sf http://127.0.0.1:8080/health
+langgraph_online,boolean,LangGraph orchestrator responds on :8123,TRUE,curl -sf http://127.0.0.1:8123/health
+ollama_online,boolean,Ollama API responds (GET /api/tags),TRUE,curl -sf http://127.0.0.1:11434/api/tags
+,,INFERENCE VALIDATION,,
+llm_inference_test,boolean,ollama run llama3:8b with simple prompt completes,TRUE,Must complete in < 120s
+gpu_used_for_inference,boolean,GPU memory allocated during inference (nvidia-smi shows > 0 MiB),TRUE,
+gpu_temp_under_load,float,GPU temp after 5 min inference,< 83,°C
+,,THERMAL & ACOUSTIC (physical measurements),,
+acoustic_test_dba,float,Sustained inference noise at 1m,< 35,dBA A-weighted
+thermal_test_gpu_max_c,float,GPU max temperature in 30-min gpu-burn,< 83,°C
+thermal_manager_active,boolean,gpu_thermal_manager.service active,TRUE,
+cpu_thermal_profile,string,Active tuned profile at boot,balanced,tuned-adm active
+,,PHYSICAL INSPECTION,,
+chassis_closed_clean,boolean,All panels installed; no loose cables visible from exterior,TRUE,
+qr_codes_affixed,boolean,QR repair code stickers affixed to all three interior locations,TRUE,
+solidarity_hat_mounted,boolean,HAT secured to bracket with M3 screws,TRUE,
+neopixel_diffuser_installed,boolean,Frosted acrylic diffuser in LED channel,TRUE,
+,,DOCUMENTATION,,
+material_passport_completed,boolean,supply_chain/passports/ entry completed for this node,TRUE,
+cern_ohls_checklist_signed,boolean,CERN-OHL-S manufacturing checklist completed,TRUE,
+,,SHIPPING,,
+shipped_date,date,Date node shipped (YYYY-MM-DD),,
+shipped_to_coop,string,Recipient cooperative or individual ID,,
+tracking_number,string,Shipping carrier tracking number,,
