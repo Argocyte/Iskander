@@ -1,0 +1,34 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Foundry
+contracts/out/
+contracts/cache/
+contracts/.env
+
+# Frontend
+frontend/__pycache__/
+
+# Docker volumes (if bind-mounted locally)
+infra/volumes/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Worktrees
+.worktrees/
+
+# Worktrees
+.worktrees/
+
+# Worktrees
+.worktrees/

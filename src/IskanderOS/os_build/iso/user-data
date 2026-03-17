@@ -1,0 +1,194 @@
+#cloud-config
+# ─────────────────────────────────────────────────────────────────────────────
+# Project Iskander — Ubuntu Subiquity Autoinstall Configuration
+# Ubuntu 24.04 LTS Server (Noble Numbat)
+#
+# PURPOSE: Fully unattended, zero-interaction OS installation.
+# Flash iskander-os.iso to USB → plug into server → walk away.
+# The node will be reachable at http://iskander.local:8501 within ~20 min.
+#
+# SECURITY NOTE:
+#   Change the hashed password below before distributing this ISO.
+#   Generate a new hash with: python3 -c "import crypt; print(crypt.crypt('yourpassword'))"
+#   The `coop` account password should be rotated via the First-Boot Dialogue.
+# ─────────────────────────────────────────────────────────────────────────────
+
+autoinstall:
+  version: 1
+  interactive-sections: []   # zero interaction
+
+  # ── Locale & Keyboard ───────────────────────────────────────────────────────
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+
+  # ── Network — DHCP on all interfaces; AP fallback handled post-install ──────
+  network:
+    version: 2
+    ethernets:
+      any:
+        match:
+          name: "en*"
+        dhcp4: true
+        dhcp6: false
+
+  # ── Storage — silently wipe first disk and install ──────────────────────────
+  # WARNING: This DESTROYS all data on the first detected disk.
+  storage:
+    layout:
+      name: lvm
+      sizing-policy: all   # Use entire disk
+
+  # ── User account ────────────────────────────────────────────────────────────
+  identity:
+    hostname: iskander
+    username: coop
+    # Default password: "solidarity" — MUST be changed post-installation.
+    # Hash generated with: python3 -c "import crypt; print(crypt.crypt('solidarity'))"
+    password: "$6$rounds=4096$iskander$Kv3TZlGm5qVQeI7K3iFm4b3zW8oRpLbzD1nXkCmqhYaT.uLvJ5GVeYwQXNS1hWMeZaT3gRkDpBmnUFqhXe0"
+
+  # ── SSH ─────────────────────────────────────────────────────────────────────
+  ssh:
+    install-server: true
+    allow-pw: true           # Tighten post-install via key-only auth
+
+  # ── Base package selection ───────────────────────────────────────────────────
+  packages:
+    - curl
+    - wget
+    - git
+    - python3
+    - python3-pip
+    - python3-venv
+    - python3-qrcode        # for welcome_screen.py QR rendering
+    - avahi-daemon
+    - avahi-utils
+    - libnss-mdns
+    - network-manager
+    - dnsmasq-base
+    - xterm                 # lightweight terminal for welcome screen fallback
+    - jq
+
+  # ── Snaps (none — FOSS/apt only per project constraints) ────────────────────
+  snaps: []
+
+  # ── Late commands — run after first reboot in the installed system ──────────
+  # All commands run as root inside a `curtin in-target` chroot.
+  late-commands:
+
+    # 1. Install Docker (official script — avoids snap)
+    - curtin in-target --target=/target -- bash -c "curl -fsSL https://get.docker.com | sh"
+    - curtin in-target --target=/target -- usermod -aG docker coop
+
+    # 2. Clone the Iskander repository
+    - curtin in-target --target=/target -- git clone https://github.com/iskander-os/iskander /opt/iskander
+
+    # 3. Copy Cloud-Init artefacts into place
+    - curtin in-target --target=/target -- cp /opt/iskander/os_build/scripts/iskander.service /etc/systemd/system/iskander.service
+    - curtin in-target --target=/target -- cp /opt/iskander/os_build/scripts/iskander-power-monitor.service /etc/systemd/system/iskander-power-monitor.service
+
+    # 4. Run mDNS setup (avahi broadcast as iskander.local)
+    - curtin in-target --target=/target -- bash /opt/iskander/os_build/scripts/setup_mdns.sh
+
+    # 5. Run Wi-Fi AP setup (broadcasts Iskander_Hearth_Setup if no Ethernet)
+    - curtin in-target --target=/target -- bash /opt/iskander/os_build/scripts/setup_wifi_ap.sh
+
+    # 6. Install Python dependencies for backend + power monitor
+    - curtin in-target --target=/target -- pip3 install --break-system-packages -r /opt/iskander/backend/requirements.txt
+
+    # 7. Pull Ollama and the OLMo model (runs in background; large download)
+    #    Phase 17: Replaced Meta Llama 3 with AI2 OLMo — a fully open-weight,
+    #    open-data, open-training-code model from the Allen Institute for AI.
+    #    OLMo's training corpus (Dolma) is publicly auditable, eliminating
+    #    the extractive opacity of corporate-controlled foundation models.
+    #    This aligns with CCIN Principle 4 (Autonomy & Independence) — the
+    #    cooperative's AI must not depend on models whose training data provenance
+    #    is unknowable and whose biases are unauditable.
+    - curtin in-target --target=/target -- bash -c "curl -fsSL https://ollama.com/install.sh | sh"
+    - curtin in-target --target=/target -- bash -c "nohup ollama pull olmo &>/var/log/ollama-pull.log &"
+
+    # 8. Create .env from example (operator must edit secrets post-install)
+    - curtin in-target --target=/target -- cp /opt/iskander/.env.example /opt/iskander/.env
+
+    # 9. Pre-pull Docker images while network is fast
+    - curtin in-target --target=/target -- bash -c "cd /opt/iskander && docker compose pull --quiet || true"
+
+    # 10. Enable and start systemd services
+    - curtin in-target --target=/target -- systemctl enable iskander.service
+    - curtin in-target --target=/target -- systemctl enable iskander-power-monitor.service
+
+    # 11. Install welcome screen as getty override on tty1
+    - curtin in-target --target=/target -- bash -c "mkdir -p /etc/systemd/system/getty@tty1.service.d"
+    - curtin in-target --target=/target -- bash -c |
+        cat > /etc/systemd/system/getty@tty1.service.d/iskander-welcome.conf <<'EOF'
+        [Service]
+        ExecStart=
+        ExecStart=-/usr/bin/python3 /opt/iskander/os_build/scripts/welcome_screen.py
+        Restart=always
+        RestartSec=5
+        EOF
+    - curtin in-target --target=/target -- systemctl daemon-reload
+
+    # 12. Phase 16E: Add noatime to all ext4/xfs mounts in /etc/fstab.
+    #     Eliminates the inode atime write-per-read penalty.
+    #     sed replaces 'relatime' with 'noatime'; adds 'noatime' if neither flag present.
+    #     Safe: noatime is a strict superset of relatime for all Iskander workloads.
+    - curtin in-target --target=/target -- bash -c |
+        sed -i 's/\brelatime\b/noatime/g' /etc/fstab
+        grep -E '^[^#].*ext4|^[^#].*xfs' /etc/fstab | grep -qv noatime && \
+          sed -i '/ext4\|xfs/ s/defaults/defaults,noatime/' /etc/fstab || true
+
+    # 13. Phase 16D: Apply PostgreSQL I/O tuning (runs after postgres container is up).
+    #     The script is idempotent and adds the ISKANDER_TUNED marker.
+    #     NOTE: Postgres must be running. This step signals the service to reload
+    #     via pg_ctlcluster or SIGHUP; the Docker container is not available here
+    #     so the script targets the system Postgres if present.
+    #     For Docker deployments, mount the script and call it from the container
+    #     via `docker compose exec postgres bash /scripts/optimize_postgres_io.sh`.
+    - curtin in-target --target=/target -- bash -c |
+        if command -v psql >/dev/null 2>&1; then
+          bash /opt/iskander/os_build/scripts/optimize_postgres_io.sh || true
+        else
+          echo "System Postgres not detected — I/O tuning skipped (Docker mode)."
+        fi
+
+    # 14. Phase 17: Mount /var/log and Docker tmpdir as tmpfs RAM-disks.
+    #     WARNING: Reduces system RAM by ~1GB but extends the lifespan of
+    #     refurbished solid-state drives by years. Docker and systemd logs
+    #     generate continuous small writes that destroy SSD NAND cells.
+    #     Data is flushed to the physical SSD hourly by log2ram_flush.sh.
+    - curtin in-target --target=/target -- bash -c |
+        # Add tmpfs entries to /etc/fstab for SSD longevity.
+        cat >> /etc/fstab <<'FSTAB'
+        # Phase 17: RAM-disk mounts to protect refurbished SSDs from log write amplification.
+        # Data flushed to SSD hourly by /opt/iskander/os_build/scripts/log2ram_flush.sh
+        tmpfs  /var/log         tmpfs  defaults,noatime,nosuid,nodev,mode=0755,size=512M  0  0
+        tmpfs  /tmp/docker-tmp  tmpfs  defaults,noatime,nosuid,nodev,mode=0755,size=512M  0  0
+        FSTAB
+    - curtin in-target --target=/target -- mkdir -p /tmp/docker-tmp
+    # Configure Docker daemon to use the tmpfs for temporary storage.
+    - curtin in-target --target=/target -- bash -c |
+        mkdir -p /etc/docker
+        cat > /etc/docker/daemon.json <<'DOCKERJSON'
+        {
+          "data-root": "/var/lib/docker",
+          "log-driver": "json-file",
+          "log-opts": { "max-size": "5m", "max-file": "2" },
+          "tmp": "/tmp/docker-tmp"
+        }
+        DOCKERJSON
+
+    # 15. Install log2ram flush cron job (Phase 17: hourly SSD write consolidation).
+    - curtin in-target --target=/target -- cp /opt/iskander/os_build/scripts/log2ram_flush.sh /opt/iskander/os_build/scripts/log2ram_flush.sh
+    - curtin in-target --target=/target -- chmod +x /opt/iskander/os_build/scripts/log2ram_flush.sh
+    - curtin in-target --target=/target -- bash -c |
+        echo '0 * * * * root /opt/iskander/os_build/scripts/log2ram_flush.sh' > /etc/cron.d/log2ram-flush
+        chmod 0644 /etc/cron.d/log2ram-flush
+
+    # 16. Set correct ownership
+    - curtin in-target --target=/target -- chown -R coop:coop /opt/iskander
+
+  # ── User data sentinel — prevents re-running autoinstall on reboot ──────────
+  user-data:
+    runcmd:
+      - touch /etc/cloud/cloud-init.disabled

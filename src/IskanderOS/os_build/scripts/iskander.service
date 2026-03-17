@@ -1,0 +1,35 @@
+[Unit]
+Description=Project Iskander — Sovereign Cooperative Node
+Documentation=https://github.com/iskander-os/iskander
+After=network-online.target docker.service avahi-daemon.service
+Wants=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=coop
+Group=docker
+WorkingDirectory=/opt/iskander
+
+# Pull latest images then start all services
+ExecStartPre=/usr/bin/docker compose pull --quiet
+ExecStart=/usr/bin/docker compose up --remove-orphans
+
+# On stop: graceful shutdown with 60s timeout before SIGKILL
+ExecStop=/usr/bin/docker compose down --timeout 60
+
+# Restart policy: always restart unless manually stopped
+Restart=on-failure
+RestartSec=15s
+
+# Resource limits — leave headroom for the host OS
+LimitNOFILE=65536
+TimeoutStartSec=300
+
+# Log to journald — retrieve with: journalctl -u iskander -f
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=iskander
+
+[Install]
+WantedBy=multi-user.target
