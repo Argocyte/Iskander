@@ -1,0 +1,184 @@
+version: "3.9"
+
+# Project Iskander — Sovereign Node Infrastructure
+# All services run locally; no proprietary cloud dependencies.
+
+services:
+
+  # ─── PostgreSQL Ledger ────────────────────────────────────────────────────
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: iskander_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: iskander_ledger
+      POSTGRES_USER: iskander
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_in_prod}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U iskander -d iskander_ledger"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ─── Ollama (Local-First LLM — OLMo by AI2) ─────────────────────────────
+  # Phase 17: Replaced Meta Llama 3 with AI2 OLMo. OLMo is fully open-weight,
+  # open-data (Dolma corpus), and open-training-code — the cooperative can
+  # audit the entire pipeline. No extractive corporate model dependency.
+  ollama:
+    image: ollama/ollama:latest
+    container_name: iskander_ollama
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    # GPU passthrough (optional — remove deploy block if no NVIDIA GPU)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ─── Anvil (Local EVM Node — Foundry) ────────────────────────────────────
+  anvil:
+    image: ghcr.io/foundry-rs/foundry:latest
+    container_name: iskander_anvil
+    restart: unless-stopped
+    entrypoint: anvil
+    command: >
+      --host 0.0.0.0
+      --port 8545
+      --chain-id 31337
+      --block-time 2
+      --accounts 10
+      --mnemonic "test test test test test test test test test test test junk"
+    ports:
+      - "8545:8545"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ─── IPFS Node (Kubo) ─────────────────────────────────────────────────────
+  ipfs:
+    image: ipfs/kubo:latest
+    container_name: iskander_ipfs
+    restart: unless-stopped
+    volumes:
+      - ipfs_data:/data/ipfs
+    ports:
+      - "4001:4001"   # swarm
+      - "5001:5001"   # API
+      - "8080:8080"   # gateway
+    environment:
+      IPFS_PROFILE: server
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ─── Traefik Reverse Proxy (Phase 13: App Store) ─────────────────────────
+  traefik:
+    image: traefik:v3.0
+    container_name: iskander_traefik
+    restart: unless-stopped
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=iskander_apps"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+      - "8180:8080"    # Traefik dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - iskander_apps
+      - default
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ─── Backend (override: mount Docker socket for Provisioner Agent) ────────
+  # Add the following volume to the backend service if running in Docker:
+  # volumes:
+  #   - /var/run/docker.sock:/var/run/docker.sock
+
+  # ─── Next.js Frontend (Phase 19: Web3 Integration) ───────────────────────
+  frontend-next:
+    build:
+      context: ./frontend-next
+      dockerfile: Dockerfile
+    container_name: iskander_frontend_next
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_CHAIN_ID: "31337"
+      NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: ${WALLETCONNECT_PROJECT_ID:-}
+    depends_on:
+      - postgres
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ─── Dendrite Matrix Homeserver (Phase 14A) ───────────────────────────────
+  dendrite:
+    image: matrixdotorg/dendrite-monolith:latest
+    container_name: iskander_dendrite
+    restart: unless-stopped
+    volumes:
+      - ./infra/dendrite/dendrite.yaml:/etc/dendrite/dendrite.yaml:ro
+      - ./infra/dendrite/appservice-iskander.yaml:/etc/dendrite/appservice-iskander.yaml:ro
+      - dendrite_data:/var/dendrite
+      - dendrite_media:/var/dendrite/media
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_in_prod}
+      MATRIX_APPSERVICE_TOKEN: ${MATRIX_APPSERVICE_TOKEN:-changeme_matrix_token}
+    ports:
+      - "8448:8448"    # Matrix S2S federation (HTTPS in prod; plain HTTP on LAN)
+      - "8008:8008"    # Matrix CS API
+    depends_on:
+      postgres:
+        condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  iskander_apps:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  ollama_data:
+  ipfs_data:
+  dendrite_data:
+  dendrite_media:

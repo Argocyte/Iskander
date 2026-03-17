@@ -1,0 +1,34 @@
+# Matrix Application Service Registration — Iskander Agent Bots
+# Phase 14A: Embedded Dendrite Homeserver
+#
+# Dendrite reads this file (referenced in dendrite.yaml app_service_api.config_files)
+# and grants the Iskander backend the ability to:
+#   1. Act as any @iskander_*:iskander.local user (virtual users).
+#   2. Receive ALL events from rooms containing @iskander_* users (push via transactions).
+#   3. Create rooms with #iskander_*:iskander.local aliases.
+#
+# TOKEN MANAGEMENT:
+#   hs_token — Dendrite uses this to authenticate its POSTs to Iskander's webhook.
+#               Set in MATRIX_APPSERVICE_TOKEN env var; must match backend/config.py.
+#   as_token — Iskander uses this to authenticate its requests to Dendrite's CS API.
+#               Same value as hs_token for simplicity; use separate tokens in production.
+#
+# SECURITY:
+#   These tokens are equivalent to superuser access for the @iskander_* namespace.
+#   Store them in .env — NEVER commit to version control.
+
+id: iskander-agents
+url: "http://backend:8000/matrix/_matrix/app/v1"   # Dendrite POSTs events here
+hs_token: "${MATRIX_APPSERVICE_TOKEN}"              # Dendrite → Iskander
+as_token: "${MATRIX_APPSERVICE_TOKEN}"              # Iskander → Dendrite
+rate_limited: false
+sender_localpart: iskander_bot                      # Default sender identity
+
+namespaces:
+  users:
+    - exclusive: true
+      regex: "@iskander_.*"          # Manages all @iskander_* virtual users
+  rooms: []                           # Does not exclusively manage any rooms
+  aliases:
+    - exclusive: false
+      regex: "#iskander_.*"          # Can create #iskander_* room aliases

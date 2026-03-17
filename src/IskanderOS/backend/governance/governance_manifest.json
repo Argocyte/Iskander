@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "constitutional_core": [
+    "anti_extractive",
+    "democratic_control",
+    "transparency",
+    "open_membership"
+  ],
+  "policies": [
+    {
+      "rule_id": "max_pay_ratio",
+      "description": "Mondragon pay-ratio cap: highest salary cannot exceed 6x the lowest",
+      "constraint_type": "MaxValue",
+      "value": "6",
+      "applies_to": ["treasurer-agent-v1"]
+    },
+    {
+      "rule_id": "max_single_payment",
+      "description": "Single payment cap: no individual payment above 100,000 without steward approval",
+      "constraint_type": "MaxValue",
+      "value": "100000",
+      "applies_to": ["treasurer-agent-v1"]
+    },
+    {
+      "rule_id": "require_approval_external",
+      "description": "All external payments require human-in-the-loop approval",
+      "constraint_type": "RequireApproval",
+      "value": "payment,transfer",
+      "applies_to": []
+    },
+    {
+      "rule_id": "deny_auto_mint",
+      "description": "Agents cannot autonomously mint tokens — humans must approve all minting",
+      "constraint_type": "Deny",
+      "value": "mint",
+      "applies_to": []
+    }
+  ]
+}

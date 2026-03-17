@@ -1,0 +1,180 @@
+# Project Iskander — Vetted FOSS App Catalog
+# Phase 13: Democratic App Store
+#
+# Only images listed here may be deployed by the Provisioner Agent.
+# Adding a new entry requires a democratic vote to amend this catalog
+# (same HITL process as an AJD approval).
+#
+# Fields:
+#   name:                Human-friendly name.
+#   docker_image:        Exact Docker Hub / registry image:tag.
+#   description:         Plain-language description for the democratic vote.
+#   default_port:        Container's primary HTTP port.
+#   category:            Broad functional category.
+#   resource_limits:     Default Docker resource constraints.
+#   environment:         Required env vars (values are generation instructions, not secrets).
+#   volumes:             Named Docker volumes to create and mount.
+#   traefik_path_prefix: Path-prefix for Traefik routing (null = host-based routing only).
+
+apps:
+
+  - name: nextcloud
+    docker_image: nextcloud:28-apache
+    description: >
+      Self-hosted file sync, calendar, contacts, and video calls.
+      The cooperative owns all data — no cloud provider can access it.
+      Replaces Google Drive / Dropbox. Supports end-to-end encryption.
+    default_port: 80
+    category: collaboration
+    resource_limits:
+      cpu_quota: 100000    # 1 CPU (microseconds per 100ms period)
+      mem_limit: "1g"
+    environment:
+      NEXTCLOUD_ADMIN_USER: "admin"
+      NEXTCLOUD_ADMIN_PASSWORD: "__GENERATE__"
+      NEXTCLOUD_TRUSTED_DOMAINS: "iskander.local"
+      POSTGRES_HOST: "postgres"
+      POSTGRES_DB: "nextcloud"
+      POSTGRES_USER: "iskander"
+      POSTGRES_PASSWORD: "__FROM_ENV__POSTGRES_PASSWORD"
+    volumes:
+      - "nextcloud_data:/var/www/html"
+    traefik_path_prefix: null   # Host-based: nextcloud.iskander.local
+
+  - name: gitea
+    docker_image: gitea/gitea:1.21-rootless
+    description: >
+      Self-hosted Git service — the cooperative's own code forge.
+      Stores all software, contracts, and documentation under collective control.
+      Replaces GitHub. Supports issues, pull requests, CI/CD hooks.
+    default_port: 3000
+    category: devops
+    resource_limits:
+      cpu_quota: 50000     # 0.5 CPU
+      mem_limit: "512m"
+    environment:
+      GITEA__database__DB_TYPE: "postgres"
+      GITEA__database__HOST: "postgres:5432"
+      GITEA__database__NAME: "gitea"
+      GITEA__database__USER: "iskander"
+      GITEA__database__PASSWD: "__FROM_ENV__POSTGRES_PASSWORD"
+      GITEA__server__DOMAIN: "gitea.iskander.local"
+      GITEA__server__ROOT_URL: "http://gitea.iskander.local"
+      GITEA__security__INSTALL_LOCK: "true"
+      GITEA__security__SECRET_KEY: "__GENERATE__"
+    volumes:
+      - "gitea_data:/var/lib/gitea"
+    traefik_path_prefix: null   # Host-based: gitea.iskander.local
+
+  - name: loomio
+    docker_image: loomio/loomio:stable
+    description: >
+      Cooperative decision-making platform with structured proposals, polls,
+      and consensus threads. The digital agora for the cooperative's governance.
+      Replaces Loomio SaaS (maintains data sovereignty on self-hosted instance).
+    default_port: 3000
+    category: governance
+    resource_limits:
+      cpu_quota: 100000
+      mem_limit: "1g"
+    environment:
+      DATABASE_URL: "postgresql://iskander:__FROM_ENV__POSTGRES_PASSWORD@postgres/loomio"
+      SECRET_KEY_BASE: "__GENERATE__"
+      DEVISE_SECRET: "__GENERATE__"
+      CANONICAL_HOST: "loomio.iskander.local"
+    volumes:
+      - "loomio_uploads:/loomio/public/system"
+    traefik_path_prefix: null
+
+  - name: penpot
+    docker_image: penpotapp/frontend:latest
+    description: >
+      Open-source design and prototyping tool. Members design cooperative
+      materials, presentations, and publications without sending data to
+      Figma or Adobe servers. Built by a worker cooperative (Kaleidos).
+    default_port: 80
+    category: design
+    resource_limits:
+      cpu_quota: 100000
+      mem_limit: "1g"
+    environment:
+      PENPOT_FLAGS: "enable-registration enable-login-with-password"
+    volumes:
+      - "penpot_data:/app/data"
+    traefik_path_prefix: null
+
+  - name: openproject
+    docker_image: openproject/openproject:14
+    description: >
+      Project management and task tracking. Gantt charts, Kanban boards,
+      time tracking, and wiki — all under cooperative ownership.
+      Replaces Asana, Jira, or Monday.com.
+    default_port: 8080
+    category: planning
+    resource_limits:
+      cpu_quota: 100000
+      mem_limit: "2g"
+    environment:
+      OPENPROJECT_SECRET_KEY_BASE: "__GENERATE__"
+      OPENPROJECT_HOST__NAME: "openproject.iskander.local"
+      DATABASE_URL: "postgresql://iskander:__FROM_ENV__POSTGRES_PASSWORD@postgres/openproject"
+    volumes:
+      - "openproject_data:/var/openproject/assets"
+    traefik_path_prefix: null
+
+  - name: ghost
+    docker_image: ghost:5-alpine
+    description: >
+      Professional publishing platform for the cooperative's public blog,
+      newsletter, and member communications. AGPL-licensed.
+      Replaces Substack or Medium.
+    default_port: 2368
+    category: publishing
+    resource_limits:
+      cpu_quota: 50000
+      mem_limit: "512m"
+    environment:
+      url: "http://ghost.iskander.local"
+      database__client: "sqlite3"
+      database__connection__filename: "/var/lib/ghost/content/data/ghost.db"
+      NODE_ENV: "production"
+    volumes:
+      - "ghost_content:/var/lib/ghost/content"
+    traefik_path_prefix: null
+
+  - name: focalboard
+    docker_image: mattermost/focalboard:latest
+    description: >
+      Open-source project board and database tool — like Notion, but cooperative-owned.
+      Supports Kanban, table, gallery, and calendar views.
+      Created by Mattermost under MIT license.
+    default_port: 8000
+    category: planning
+    resource_limits:
+      cpu_quota: 50000
+      mem_limit: "256m"
+    environment:
+      FOCALBOARD_DB_TYPE: "postgres"
+      FOCALBOARD_DB_CONFIG: "postgres://iskander:__FROM_ENV__POSTGRES_PASSWORD@postgres/focalboard?sslmode=disable"
+    volumes:
+      - "focalboard_data:/data"
+    traefik_path_prefix: null
+
+  - name: onlyoffice
+    docker_image: onlyoffice/documentserver:latest
+    description: >
+      Full-featured office suite (Writer, Calc, Impress) compatible with
+      Microsoft Office formats. Integrates with Nextcloud for collaborative
+      document editing. AGPL-licensed.
+    default_port: 80
+    category: productivity
+    resource_limits:
+      cpu_quota: 200000    # 2 CPUs — document rendering is CPU-intensive
+      mem_limit: "2g"
+    environment:
+      JWT_ENABLED: "true"
+      JWT_SECRET: "__GENERATE__"
+    volumes:
+      - "onlyoffice_data:/var/www/onlyoffice/Data"
+      - "onlyoffice_logs:/var/log/onlyoffice"
+    traefik_path_prefix: null

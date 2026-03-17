@@ -1,0 +1,28 @@
+[Unit]
+Description=Iskander — Power-Aware Graceful Degradation Monitor
+Documentation=https://github.com/iskander-os/iskander
+After=network.target iskander.service
+Wants=iskander.service
+
+[Service]
+Type=simple
+User=coop
+WorkingDirectory=/opt/iskander
+
+ExecStart=/usr/bin/python3 /opt/iskander/os_build/scripts/power_monitor.py
+
+# Environment overrides — tune for your hardware
+Environment="ISKANDER_API_URL=http://localhost:8000"
+Environment="POWER_POLL_SECS=30"
+Environment="POWER_LOW_PCT=25"
+Environment="POWER_CRIT_PCT=10"
+
+Restart=on-failure
+RestartSec=10s
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=iskander-power
+
+[Install]
+WantedBy=multi-user.target
