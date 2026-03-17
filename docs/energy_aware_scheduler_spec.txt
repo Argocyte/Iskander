@@ -1,0 +1,43 @@
+# FILE: energy_aware_scheduler_spec.md
+# PROJECT: Project Iskander
+# COMPONENT: Hearth Energy-Aware Agent Scheduler (The "Heartbeat" Layer)
+# VERSION: 0.1-BETA
+
+## 1. MISSION STATEMENT
+To implement a "Hardware-in-the-Loop" orchestration layer that regulates Agentic activity (LLM inference, database indexing, P2P syncing) based on real-time telemetry from the Iskander Hearth hardware (I2C sensors). The scheduler must prioritize physical survival (power-state) over computational output.
+
+## 2. SYSTEM ARCHITECTURE
+- **HearthInterface (Hardware Driver):** Reads raw I2C power, battery, and thermal data.
+- **Governor (Middleware):** Intercepts all LangGraph/FastAPI task requests.
+- **ResourcePolicyEngine:** Contains the state-logic (Green/Yellow/Red) and determines execution constraints.
+- **TaskQueuer:** Manages deferred tasks (asynchronous queue).
+
+## 3. ENERGY STATE DEFINITIONS (The "Tri-State" Logic)
+The `ResourcePolicyEngine` shall operate on three hardware-driven states:
+
+### State A: GREEN (Optimal | Battery > 80% or AC Power)
+- **Permissions:** Full Agent capability.
+- **Inference:** Maximum precision models (e.g., Llama-3-70B or similar high-compute).
+- **Network:** Peer-to-peer data replication enabled (high bandwidth usage).
+
+### State B: YELLOW (Throttle | Battery 20%-80%)
+- **Permissions:** Restricted Agents only (Secretary, Treasurer).
+- **Inference:** Quantized/Lite models (e.g., Llama-3-8B-INT4).
+- **Action:** Batch all non-urgent tasks (e.g., internal logging, archival) to "Grid-time" (if AC present).
+
+### State C: RED (Survival | Battery < 20% or Thermal Overheat)
+- **Permissions:** EMERGENCY/HEARTBEAT ONLY.
+- **Inference:** HARD HALT on non-critical inference. All local AI tasks blocked.
+- **Network:** Broadcast "SOS: Load-Offload Request" to local cooperative mesh (ask neighbor nodes to compute).
+- **Graceful Shutdown:** Prepare `tmpfs` RAM-disk persistence to SSD to prevent data loss.
+
+## 4. TECHNICAL REQUIREMENTS
+### A. The Governor Middleware (FastAPI/LangGraph)
+- **Interceptor:** Create a decorator/middleware for the LangGraph entry point: `@energy_gated_execution`.
+- **Logic:** 
+  ```python
+  def check_energy_gate(task_type):
+      state = get_current_hearth_state()
+      if state == "RED" and not task_type.is_critical:
+          return reject_or_queue(task_type)
+      # ...

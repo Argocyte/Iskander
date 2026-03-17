@@ -1,0 +1,55 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  Iskander Hearth — Tier 2 Chassis Thermal CFD
+  OpenFOAM v2312 | Turbulent kinetic energy k
+
+  Inlet turbulence intensity I = 5% (moderate — fan wake)
+  Inlet k = 1.5 × (U × I)² = 1.5 × (2.5 × 0.05)² = 0.0234 m²/s²
+  Using 0.02 m²/s² as round initial value.
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      k;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 2 -2 0 0 0 0];   // m²/s²
+
+internalField   uniform 0.02;
+
+boundaryField
+{
+    intake_fan
+    {
+        type        fixedValue;
+        value       uniform 0.02;
+    }
+
+    exhaust_fan
+    {
+        type        inletOutlet;
+        inletValue  uniform 0.02;
+        value       uniform 0.02;
+    }
+
+    front_vents    { type inletOutlet; inletValue uniform 0.02; value uniform 0.02; }
+    gpu_vent_slots { type inletOutlet; inletValue uniform 0.02; value uniform 0.02; }
+
+    // Wall BCs for k-ω SST low-Re: kLowReWallFunction or fixedValue 0
+    // kLowReWallFunction handles the transition from y+=0 to log layer
+    gpu_surface    { type kLowReWallFunction; value uniform 0.02; }
+    cpu_surface    { type kLowReWallFunction; value uniform 0.02; }
+    chassis_walls  { type kLowReWallFunction; value uniform 0.02; }
+
+    front_panel    { type kLowReWallFunction; value uniform 0.02; }
+    rear_panel     { type kLowReWallFunction; value uniform 0.02; }
+    left_panel     { type kLowReWallFunction; value uniform 0.02; }
+    right_panel    { type kLowReWallFunction; value uniform 0.02; }
+    bottom_panel   { type kLowReWallFunction; value uniform 0.02; }
+    top_panel      { type kLowReWallFunction; value uniform 0.02; }
+}
+
+// ************************************************************************* //

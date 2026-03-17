@@ -1,0 +1,42 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  Iskander Hearth — Tier 2 Chassis Thermal CFD
+  OpenFOAM v2312 | Turbulent thermal diffusivity alphat
+
+  alphat = nut / Prt  (computed by solver from nut and Pr)
+  Initial value 0 — solver updates from turbulence fields each iteration.
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      alphat;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [1 -1 -1 0 0 0 0];   // kg/(m·s)
+
+internalField   uniform 0;
+
+boundaryField
+{
+    intake_fan     { type calculated; value uniform 0; }
+    exhaust_fan    { type calculated; value uniform 0; }
+    front_vents    { type calculated; value uniform 0; }
+    gpu_vent_slots { type calculated; value uniform 0; }
+
+    // alphatWallFunction: Jayatilleke P-function for thermal wall treatment
+    gpu_surface    { type alphatWallFunction; Prt 0.85; value uniform 0; }
+    cpu_surface    { type alphatWallFunction; Prt 0.85; value uniform 0; }
+    chassis_walls  { type alphatWallFunction; Prt 0.85; value uniform 0; }
+
+    front_panel    { type alphatWallFunction; Prt 0.85; value uniform 0; }
+    rear_panel     { type alphatWallFunction; Prt 0.85; value uniform 0; }
+    left_panel     { type alphatWallFunction; Prt 0.85; value uniform 0; }
+    right_panel    { type alphatWallFunction; Prt 0.85; value uniform 0; }
+    bottom_panel   { type alphatWallFunction; Prt 0.85; value uniform 0; }
+    top_panel      { type alphatWallFunction; Prt 0.85; value uniform 0; }
+}
+
+// ************************************************************************* //

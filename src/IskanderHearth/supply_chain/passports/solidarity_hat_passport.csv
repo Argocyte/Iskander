@@ -1,0 +1,43 @@
+field,value
+component_name,Solidarity HAT v1
+component_id,P5-SOLIDARITY-HAT-V1
+version,1.0
+date_of_design,2026-03-16
+license,CERN-OHL-S v2
+oshwa_uid,PENDING
+designer,Iskander Hearth Cooperative
+source_repository,https://github.com/iskander-hearth/solidarity-hat
+board_dimensions_mm,65 x 56
+layer_count,2
+pcb_material,FR4 1.6mm HASL
+pcb_fabricator,JLCPCB
+pcb_minimum_order_qty,5
+,,
+component_id,component_name,manufacturer,manufacturer_pn,qty,unit_cost_usd,supplier,conflict_mineral_disclosure,rohs_compliant,reach_compliant,country_of_origin,notes
+P5-001,DPST Toggle Switch,E-Switch,100SP1T1B4M2QEH,3,3.00,DigiKey,No conflict minerals declared,YES,YES,USA/China,Panel-mount M12. Safety-critical: must pass continuity test before installation.
+P5-002,INA3221AIDR,Texas Instruments,INA3221AIDR,1,4.00,DigiKey,TI conflict minerals disclosure available at ti.com,YES,YES,USA (fab: various),SOIC-14. I2C 0x40. Datasheet Rev. E.
+P5-003,ATECC608B-MAHDA-S,Microchip Technology,ATECC608B-MAHDA-S,1,1.50,DigiKey,Microchip CMRT available,YES,YES,USA (fab: Taiwan),SOIC-8. I2C 0x60. ECC-P256. Security-critical component.
+P5-004,2x20 Pin Header,Amphenol,10129381-940002BLF,1,0.50,DigiKey,Amphenol CMRT available,YES,YES,China,J1 main HAT connector.
+P5-005,PCB,JLCPCB,—,5,3.00,JLCPCB,Fab CMRT on file,YES,YES,China,2-layer FR4 HASL 65x56mm. 5-unit minimum order.
+P5-006a,LED Green 0805,Wurth Elektronik,150080GS75000,1,0.10,DigiKey,WE CMRT available,YES,YES,Germany/China,LED1 power indicator.
+P5-006b,LED Blue 0805,Wurth Elektronik,150080BS75000,1,0.10,DigiKey,WE CMRT available,YES,YES,Germany/China,LED2 I2C activity.
+P5-006c,LED Amber 0805,Wurth Elektronik,150080AS75000,1,0.10,DigiKey,WE CMRT available,YES,YES,Germany/China,LED3 kill-switch aggregate.
+P5-006d,LED Red 0805,Wurth Elektronik,150080RS75000,1,0.10,DigiKey,WE CMRT available,YES,YES,Germany/China,LED4 ATECC heartbeat.
+P5-007a,Cap 100nF 0805,Yageo,CC0805KRX7R9BB104,6,0.05,DigiKey,Yageo CMRT available,YES,YES,Taiwan,Decoupling caps.
+P5-007b,Cap 10uF 0805,Murata,GRM21BR61A106KE18L,2,0.15,DigiKey,Murata CMRT available,YES,YES,Japan,Bulk decoupling.
+P5-007c,Res 4k7 0805,Yageo,RC0805FR-074K7L,2,0.02,DigiKey,Yageo CMRT available,YES,YES,Taiwan,I2C pull-ups.
+P5-007d,Res 10k 0805,Yageo,RC0805FR-0710KL,3,0.02,DigiKey,Yageo CMRT available,YES,YES,Taiwan,GPIO pull-downs.
+P5-007e,Res 100R 0805,Yageo,RC0805FR-07100RL,4,0.02,DigiKey,Yageo CMRT available,YES,YES,Taiwan,LED series resistors.
+P5-007f,Shunt 0.1R 2512,Bourns,CSS2512FT0R100,3,0.30,DigiKey,Bourns CMRT available,YES,YES,USA/China,Current sense resistors for INA3221.
+P5-008,10-pin IDC,Amphenol,71600-010LF,1,0.60,DigiKey,Amphenol CMRT available,YES,YES,China,TPM passthrough header (DNP by default).
+MISC-1,USB2 9-pin header,Amphenol,10118192-0001LF,2,0.40,DigiKey,Amphenol CMRT available,YES,YES,China,J2 in-line USB connector pair.
+MISC-2,4-pin header,Sullins,PREC004SAAN-RC,2,0.15,DigiKey,Sullins CMRT available,YES,YES,USA,J3 J4 enable headers.
+MISC-3,JST-XH 3-pin,JST,B3B-XH-A,3,0.20,DigiKey,JST CMRT available,YES,YES,Japan,J6 J7 J8 shunt terminals.
+MISC-4,Diode 1N4148,ON Semiconductor,1N4148,3,0.03,DigiKey,ON Semi CMRT available,YES,YES,USA/China,D1-D3 kill-state diode-OR.
+,,
+total_per_unit_cost_usd,31.47
+repair_manual_url,https://github.com/iskander-hearth/solidarity-hat/wiki/repair
+replacement_parts_url,https://github.com/iskander-hearth/solidarity-hat/bom
+eol_policy,All components available on open market. PCB files licensed CERN-OHL-S v2 — any fab can reproduce.
+warranty_cooperative_node,Community-supported repair via Hearth Builder Network. No manufacturer warranty.
+conflict_minerals_statement,All suppliers have submitted Conflict Minerals Reporting Templates (CMRT). Templates on file with Iskander Hearth project repository.

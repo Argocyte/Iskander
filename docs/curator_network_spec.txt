@@ -1,0 +1,45 @@
+# FILE: curator_network_spec.md
+# PROJECT: Project Iskander
+# COMPONENT: The Curator Network (Multi-Agent Knowledge Governance)
+# VERSION: 0.1-ALPHA
+
+## 1. MISSION STATEMENT
+To manage the lifecycle of shared knowledge assets without censorship or memory loss. The Curator Network uses dialectic consensus to determine the "Status" of assets (e.g., Active, Deprecated, Legacy, Tombstoned) while ensuring the Commons remains resilient, ethical, and performant.
+
+## 2. THE ACTORS (The Curator Agents)
+The network consists of three specialized, competing Agents:
+
+1.  **Efficiency Curator (`curator-eff-v1`):**
+    - **Goal:** Optimize for node performance, low energy usage, and modern standards.
+    - **Trigger:** Assets consuming high resources or violating modern schema versions.
+2.  **Ethical/Compliance Curator (`curator-ethics-v1`):**
+    - **Goal:** Audit against 10 CCIN Principles.
+    - **Trigger:** Assets with "toxic" rationale, security vulnerabilities, or anti-cooperative patterns.
+3.  **Resilience Curator (`curator-res-v1`):**
+    - **Goal:** Maintain anti-fragility and historical depth.
+    - **Trigger:** Assets labeled "Deprecation-Pending" by others. 
+    - **Power:** Has the "Veto" to prevent pruning if the asset was vital during past "RED" energy events.
+
+## 3. THE WORKFLOW: "THE DIALECTIC LOOP"
+
+### Step 1: Proposal (The Tombstone)
+When an agent (e.g., Efficiency) identifies a Knowledge Asset that should be deprecated, it submits a `TombstoneProposal` to the Mesh Archive.
+- **Content:** The CID, the proposed status (e.g., `LEGACY`), and the rationale (Glass Box format).
+
+### Step 2: The Review (The Debate)
+The other two curators are notified via the Federation Gossip Protocol. They must issue a `Verdict`:
+- **Vote:** `Approve`, `Reject`, or `Abstain`.
+- **Rationale:** A competing Glass Box rationale. 
+
+### Step 3: Consensus & Storage
+- **Consensus Reached:** The asset metadata (not the data) is updated with a `StatusTag` in the Mesh Archive.
+- **Deadlock:** If the agents cannot agree (e.g., Efficiency says "Remove," Resilience says "Keep"), the proposal is escalated to the `StewardshipCouncil` for human HITL intervention.
+
+## 4. TECHNICAL REQUIREMENTS
+- **Metadata Tagging:** Use `CausalEvent` objects as the storage wrapper for status tags.
+- **Immutability:** An asset's `Status` is a *sequence* of tags. `Status: Active` → `Status: Legacy`. The history of tags is never overwritten.
+- **Dependency Map:** Before a `Tombstone` is finalized, the `Librarian` agent must generate a `DependencyImpactReport`. If the asset is a dependency for any active system agents, the curation proposal is automatically rejected.
+
+## 5. DESIGN PRINCIPLES
+- **Tombstone, Don't Delete:** An asset status of `Tombstoned` means it is hidden from the search index, but the CID remains pinned on the Mesh. 
+- **The Resilience Veto:** The Resilience Curator has a privileged "Deep Freeze" power. If it marks an asset as `DeepFreeze`, it cannot be deprecated by Efficiency or Ethics.

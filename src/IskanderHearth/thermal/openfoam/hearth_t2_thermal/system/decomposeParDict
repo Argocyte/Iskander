@@ -1,0 +1,29 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  Iskander Hearth — Tier 2 Chassis Thermal CFD
+  OpenFOAM v2312 | Domain decomposition for parallel runs
+
+  Set numberOfSubdomains to match your CPU core count.
+  scotch method auto-balances load for snappyHexMesh-generated meshes.
+  Run: decomposePar && mpirun -np N buoyantSimpleFoam -parallel
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      decomposeParDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Adjust to available CPU cores. The Tier 2 node (12-core Ryzen 7) can use
+// up to 12 subdomains. Leave 2 cores free for OS/thermal daemon.
+numberOfSubdomains  10;
+
+method          scotch;
+
+// ← Alternative: simple (faster decomposition, less balanced)
+// method          simple;
+// simpleCoeffs { n (5 2 1); delta 0.001; }
+
+// ************************************************************************* //

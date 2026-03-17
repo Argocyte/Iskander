@@ -1,0 +1,103 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  Iskander Hearth — Tier 2 Chassis Thermal CFD
+  OpenFOAM v2312 | Temperature field (initial + boundary conditions)
+
+  All temperatures in Kelvin.
+  Ambient: 300K (27°C). Intake fan supplies air at ambient.
+  GPU surface: externalWallHeatFluxTemperature at 4250 W/m² (85W / 0.02m²).
+  CPU surface: externalWallHeatFluxTemperature at 2500 W/m² (25W / 0.01m²).
+  All other walls: adiabatic (zeroGradient).
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      T;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 0 0 1 0 0 0];   // Kelvin
+
+internalField   uniform 300;       // Initial field: 300K throughout
+
+boundaryField
+{
+    // ── Intake fan (top panel) ────────────────────────────────────────────────
+    // Supply cool ambient air
+    intake_fan
+    {
+        type        fixedValue;
+        value       uniform 300;   // 300K inlet air (27°C ambient)
+    }
+
+    // ── Exhaust fan (rear panel) ──────────────────────────────────────────────
+    // Allow reverse flow at outlet (inletOutlet is robust for SIMPLE)
+    exhaust_fan
+    {
+        type        inletOutlet;
+        inletValue  uniform 300;
+        value       uniform 300;
+    }
+
+    // ── Front panel vents (intake) ────────────────────────────────────────────
+    front_vents
+    {
+        type        inletOutlet;
+        inletValue  uniform 300;
+        value       uniform 300;
+    }
+
+    // ── GPU exhaust vent slots (left panel) ──────────────────────────────────
+    gpu_vent_slots
+    {
+        type        inletOutlet;
+        inletValue  uniform 300;
+        value       uniform 300;
+    }
+
+    // ── GPU heat source surface ───────────────────────────────────────────────
+    // 85W total at sustained 140W PL (~60% radiated from heatsink)
+    // Surface area estimate: 0.020 m² (GPU heatsink fin pack top face)
+    // Heat flux: 85 / 0.02 = 4250 W/m²
+    gpu_surface
+    {
+        type        externalWallHeatFluxTemperature;
+        mode        flux;
+        q           uniform 4250;   // W/m²
+        kappaMethod fluidThermo;
+        value       uniform 340;    // Initial guess: 40K above ambient
+    }
+
+    // ── CPU heat source surface ───────────────────────────────────────────────
+    // 25W total at typical inference load
+    // Surface area estimate: 0.010 m² (CPU heatsink base)
+    // Heat flux: 25 / 0.01 = 2500 W/m²
+    cpu_surface
+    {
+        type        externalWallHeatFluxTemperature;
+        mode        flux;
+        q           uniform 2500;   // W/m²
+        kappaMethod fluidThermo;
+        value       uniform 330;
+    }
+
+    // ── All other chassis walls (adiabatic) ──────────────────────────────────
+    chassis_walls
+    {
+        type        zeroGradient;
+    }
+
+    // ── blockMesh boundary patches (covered by chassis STL after snappy) ─────
+    // These are the original blockMesh faces — retained for completeness
+    // but should all be overridden by snappyHexMesh patches above.
+    front_panel   { type zeroGradient; }
+    rear_panel    { type zeroGradient; }
+    left_panel    { type zeroGradient; }
+    right_panel   { type zeroGradient; }
+    bottom_panel  { type zeroGradient; }
+    top_panel     { type zeroGradient; }
+}
+
+// ************************************************************************* //
