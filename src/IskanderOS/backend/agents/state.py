@@ -328,3 +328,26 @@ class ResearchFellowshipState(AgentState):
     rationale_log:          list[str]
     escalation_signal:      bool
     requires_human_token:   bool
+
+
+class BootState(AgentState):
+    """State for the Genesis Boot Sequence (InitializerAgent)."""
+    mode:                     str | None
+    node_type:                str | None
+    coop_profile:             dict[str, Any] | None
+    owner_profile:            dict[str, Any] | None
+    skeleton_template_cid:    str | None
+    extracted_rules:          list[dict[str, Any]]
+    mapping_confirmations:    dict[str, dict[str, Any]]
+    founder_confirmations:    dict[str, bool]
+    ambiguous_rules:          list[str]
+    regulatory_layer:         dict[str, Any] | None
+    genesis_manifest:         dict[str, Any] | None
+    constitution_cid:         str | None
+    genesis_manifest_cid:     str | None
+    founding_tx_hash:         str | None
+    founder_sbt_ids:          list[int]
+    safe_address:             str | None
+    boot_phase:               str
+    boot_complete:            bool
+    requires_human_token:     bool

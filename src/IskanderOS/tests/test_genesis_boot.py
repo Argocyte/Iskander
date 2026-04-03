@@ -121,3 +121,26 @@ class TestPolicyRuleMetadata:
             metadata={"_ambiguous": True},
         )
         assert rule.metadata["_ambiguous"] is True
+
+
+from backend.agents.state import BootState, AgentState
+
+
+class TestBootState:
+    def test_boot_state_extends_agent_state(self):
+        agent_keys = set(AgentState.__annotations__.keys())
+        boot_keys = set(BootState.__annotations__.keys())
+        assert agent_keys.issubset(boot_keys)
+
+    def test_boot_state_has_genesis_fields(self):
+        required = {
+            "mode", "node_type", "coop_profile", "owner_profile",
+            "skeleton_template_cid", "extracted_rules", "mapping_confirmations",
+            "founder_confirmations", "ambiguous_rules", "regulatory_layer",
+            "genesis_manifest", "constitution_cid", "genesis_manifest_cid",
+            "founding_tx_hash", "founder_sbt_ids", "safe_address",
+            "boot_phase", "boot_complete", "requires_human_token",
+        }
+        boot_keys = set(BootState.__annotations__.keys())
+        missing = required - boot_keys
+        assert not missing, f"Missing fields in BootState: {missing}"
