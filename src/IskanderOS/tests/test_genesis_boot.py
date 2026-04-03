@@ -144,3 +144,40 @@ class TestBootState:
         boot_keys = set(BootState.__annotations__.keys())
         missing = required - boot_keys
         assert not missing, f"Missing fields in BootState: {missing}"
+
+
+import json
+from pathlib import Path
+
+
+class TestRegulatoryTemplates:
+    TEMPLATES_DIR = Path("backend/governance/regulatory")
+
+    def test_universal_template_exists(self):
+        assert (self.TEMPLATES_DIR / "UNIVERSAL.json").exists()
+
+    def test_gb_template_exists(self):
+        assert (self.TEMPLATES_DIR / "GB.json").exists()
+
+    def test_es_template_exists(self):
+        assert (self.TEMPLATES_DIR / "ES.json").exists()
+
+    def test_templates_valid_json(self):
+        for name in ("UNIVERSAL.json", "GB.json", "ES.json"):
+            with open(self.TEMPLATES_DIR / name) as f:
+                data = json.load(f)
+            assert "jurisdiction" in data
+            assert "rules" in data
+            assert isinstance(data["rules"], list)
+
+    def test_universal_has_no_jurisdiction_rules(self):
+        with open(self.TEMPLATES_DIR / "UNIVERSAL.json") as f:
+            data = json.load(f)
+        assert data["jurisdiction"] == "UNIVERSAL"
+        for rule in data["rules"]:
+            assert rule.get("metadata", {}).get("_regulatory") is True
+
+    def test_gb_template_jurisdiction(self):
+        with open(self.TEMPLATES_DIR / "GB.json") as f:
+            data = json.load(f)
+        assert data["jurisdiction"] == "GB"
