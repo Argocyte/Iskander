@@ -59,7 +59,8 @@
       "Bash(python -m pytest tests/test_genesis_boot.py::TestGenesisRouter -v)",
       "Bash(python -c \"from backend.main import app; print\\(''Genesis router registered:'', any\\(r.path.startswith\\(''/genesis''\\) for r in app.routes\\)\\)\")",
       "Bash(python -m pytest tests/test_genesis_boot.py::TestSoloBootEndToEnd -v)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(git ls-tree:*)"
     ]
   }
 }
