@@ -79,4 +79,33 @@ contract CoopIdentityTest is Test {
         identity.attest(alice, DID, "worker-owner", URI);
         vm.stopPrank();
     }
+
+    function test_SetConstitution() public {
+        address constitutionAddr = makeAddr("constitution");
+        vm.prank(steward);
+        identity.setConstitution(constitutionAddr);
+        assertEq(identity.constitution(), constitutionAddr);
+    }
+
+    function test_SetConstitutionTwiceReverts() public {
+        address addr1 = makeAddr("constitution1");
+        address addr2 = makeAddr("constitution2");
+        vm.prank(steward);
+        identity.setConstitution(addr1);
+        vm.prank(steward);
+        vm.expectRevert("CoopIdentity: constitution already set");
+        identity.setConstitution(addr2);
+    }
+
+    function test_NonStewardCannotSetConstitution() public {
+        vm.prank(alice);
+        vm.expectRevert(CoopIdentity.NotSteward.selector);
+        identity.setConstitution(makeAddr("constitution"));
+    }
+
+    function test_SetConstitutionZeroAddressReverts() public {
+        vm.prank(steward);
+        vm.expectRevert("CoopIdentity: zero address");
+        identity.setConstitution(address(0));
+    }
 }

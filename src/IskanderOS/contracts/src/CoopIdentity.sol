@@ -244,6 +244,17 @@ contract CoopIdentity is ERC165, IERC4973 {
         emit ArbitrationRegistrySet(_registry);
     }
 
+    address public constitution;
+
+    event ConstitutionSet(address indexed constitution);
+
+    function setConstitution(address _constitution) external onlySteward {
+        require(_constitution != address(0), "CoopIdentity: zero address");
+        require(constitution == address(0), "CoopIdentity: constitution already set");
+        constitution = _constitution;
+        emit ConstitutionSet(_constitution);
+    }
+
     /**
      * @notice Reduce a member's trust score following a bad-faith arbitration finding.
      * @dev    Only callable by the authorised ArbitrationRegistry contract.
