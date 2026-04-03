@@ -170,3 +170,119 @@ def configure_solo_manifest(state: dict[str, Any]) -> dict[str, Any]:
             payload={"policy_count": len(regulatory_rules)},
         ),
     }
+
+
+def register_founders(state: dict[str, Any]) -> dict[str, Any]:
+    """Validate minimum 3 founders are registered."""
+    if state.get("error"):
+        return state
+
+    confirmations = state.get("founder_confirmations", {})
+    if len(confirmations) < settings.genesis_min_founders:
+        return {
+            **state,
+            "error": (
+                f"Cooperative genesis requires minimum {settings.genesis_min_founders} "
+                f"founders. Currently registered: {len(confirmations)}."
+            ),
+        }
+
+    return {
+        **state,
+        "boot_phase": "founders-registered",
+        "action_log": _append_action(
+            state,
+            "register_founders",
+            f"Registered {len(confirmations)} founding member(s). "
+            f"Minimum {settings.genesis_min_founders} met.",
+            payload={"founder_count": len(confirmations)},
+        ),
+    }
+
+
+def compile_genesis_manifest(state: dict[str, Any]) -> dict[str, Any]:
+    """Merge confirmed rules by tier + regulatory layer into GovernanceManifest."""
+    if state.get("error"):
+        return state
+
+    extracted = state.get("extracted_rules", [])
+    regulatory = state.get("regulatory_layer") or {}
+    regulatory_rules = regulatory.get("rules", [])
+
+    confirmed_policies = []
+    for rule in extracted:
+        if rule.get("confirmed"):
+            policy = rule.get("proposed_policy_rule", {})
+            confirmed_policies.append(policy)
+
+    all_policies = regulatory_rules + confirmed_policies
+
+    manifest = {
+        "version": 1,
+        "constitutional_core": [
+            "anti_extractive",
+            "democratic_control",
+            "transparency",
+            "open_membership",
+        ],
+        "policies": all_policies,
+    }
+
+    return {
+        **state,
+        "genesis_manifest": manifest,
+        "boot_phase": "manifest-compiled",
+        "action_log": _append_action(
+            state,
+            "compile_genesis_manifest",
+            f"Compiled genesis manifest: {len(regulatory_rules)} regulatory + "
+            f"{len(confirmed_policies)} confirmed = {len(all_policies)} total rules.",
+            EthicalImpactLevel.MEDIUM,
+            payload={
+                "regulatory_count": len(regulatory_rules),
+                "confirmed_count": len(confirmed_policies),
+                "total_count": len(all_policies),
+            },
+        ),
+    }
+
+
+REQUIRED_CCIN = {"anti_extractive", "democratic_control", "transparency", "open_membership"}
+
+
+def validate_genesis_manifest(state: dict[str, Any]) -> dict[str, Any]:
+    """Validate the compiled manifest has all required fields."""
+    if state.get("error"):
+        return state
+
+    manifest = state.get("genesis_manifest")
+    if not manifest:
+        return {**state, "error": "No genesis manifest to validate."}
+
+    core = set(manifest.get("constitutional_core", []))
+    missing_ccin = REQUIRED_CCIN - core
+    if missing_ccin:
+        return {
+            **state,
+            "error": f"CCIN constitutional core incomplete. Missing: {missing_ccin}",
+        }
+
+    if manifest.get("version", 0) < 1:
+        return {**state, "error": "Manifest version must be >= 1."}
+
+    return {
+        **state,
+        "boot_phase": "manifest-validated",
+        "action_log": _append_action(
+            state,
+            "validate_genesis_manifest",
+            f"Genesis manifest validated: version={manifest['version']}, "
+            f"CCIN core complete, {len(manifest.get('policies', []))} policy rule(s).",
+            EthicalImpactLevel.MEDIUM,
+            payload={
+                "version": manifest["version"],
+                "policy_count": len(manifest.get("policies", [])),
+                "ccin_complete": True,
+            },
+        ),
+    }

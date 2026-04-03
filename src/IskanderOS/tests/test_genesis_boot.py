@@ -266,3 +266,100 @@ class TestSoloPathNodes:
         assert result["genesis_manifest"] is not None
         assert result["genesis_manifest"]["version"] == 1
         assert len(result["genesis_manifest"]["policies"]) >= 1
+
+
+# ── Task 10: Cooperative Path Nodes ──────────────────────────────────────────
+
+from backend.agents.genesis.initializer_agent import (
+    register_founders,
+    compile_genesis_manifest,
+    validate_genesis_manifest,
+)
+
+
+def _coop_initial_state() -> dict:
+    state = _solo_initial_state()
+    state["mode"] = GenesisMode.LEGACY_IMPORT.value
+    state["node_type"] = "cooperative"
+    return state
+
+
+class TestCooperativePathNodes:
+    def test_register_founders_minimum_3(self):
+        state = _coop_initial_state()
+        state["founder_confirmations"] = {
+            "did:key:alice": False,
+            "did:key:bob": False,
+        }
+        result = register_founders(state)
+        assert result["error"] is not None
+        assert "minimum 3" in result["error"].lower()
+
+    def test_register_founders_success(self):
+        state = _coop_initial_state()
+        state["founder_confirmations"] = {
+            "did:key:alice": False,
+            "did:key:bob": False,
+            "did:key:carol": False,
+        }
+        result = register_founders(state)
+        assert result["error"] is None
+        assert result["boot_phase"] == "founders-registered"
+
+    def test_compile_genesis_manifest_merges_tiers(self):
+        state = _coop_initial_state()
+        state["extracted_rules"] = [
+            {
+                "rule_id": "pay_ratio",
+                "tier": "Constitutional",
+                "proposed_policy_rule": {"rule_id": "pay_ratio", "description": "6:1 cap", "constraint_type": "MaxValue", "value": "6", "applies_to": []},
+                "confirmed": True,
+            },
+            {
+                "rule_id": "spend_limit",
+                "tier": "Operational",
+                "proposed_policy_rule": {"rule_id": "spend_limit", "description": "100k cap", "constraint_type": "MaxValue", "value": "100000", "applies_to": []},
+                "confirmed": True,
+            },
+        ]
+        state["regulatory_layer"] = {
+            "jurisdiction": "GB",
+            "rules": [{"rule_id": "reg_test", "metadata": {"_regulatory": True}}],
+            "non_overridable": True,
+        }
+        result = compile_genesis_manifest(state)
+        manifest = result["genesis_manifest"]
+        assert manifest["version"] == 1
+        assert len(manifest["policies"]) == 3
+
+    def test_compile_genesis_manifest_skips_unconfirmed(self):
+        state = _coop_initial_state()
+        state["extracted_rules"] = [
+            {"rule_id": "confirmed_rule", "tier": "Operational", "proposed_policy_rule": {"rule_id": "confirmed_rule"}, "confirmed": True},
+            {"rule_id": "unconfirmed_rule", "tier": "Operational", "proposed_policy_rule": {"rule_id": "unconfirmed_rule"}, "confirmed": False},
+        ]
+        state["regulatory_layer"] = {"rules": [], "non_overridable": True}
+        result = compile_genesis_manifest(state)
+        rule_ids = [r.get("rule_id") for r in result["genesis_manifest"]["policies"]]
+        assert "confirmed_rule" in rule_ids
+        assert "unconfirmed_rule" not in rule_ids
+
+    def test_validate_genesis_manifest_passes(self):
+        state = _coop_initial_state()
+        state["genesis_manifest"] = {
+            "version": 1,
+            "constitutional_core": ["anti_extractive", "democratic_control", "transparency", "open_membership"],
+            "policies": [{"rule_id": "test"}],
+        }
+        state["regulatory_layer"] = {"rules": [], "non_overridable": True}
+        result = validate_genesis_manifest(state)
+        assert result["error"] is None
+        assert result["boot_phase"] == "manifest-validated"
+
+    def test_validate_genesis_manifest_missing_ccin(self):
+        state = _coop_initial_state()
+        state["genesis_manifest"] = {"version": 1, "constitutional_core": [], "policies": []}
+        state["regulatory_layer"] = {"rules": [], "non_overridable": True}
+        result = validate_genesis_manifest(state)
+        assert result["error"] is not None
+        assert "CCIN" in result["error"]
