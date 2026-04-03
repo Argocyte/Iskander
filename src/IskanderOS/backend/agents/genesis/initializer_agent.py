@@ -286,3 +286,228 @@ def validate_genesis_manifest(state: dict[str, Any]) -> dict[str, Any]:
             },
         ),
     }
+
+
+# ── Task 12: StateGraph wiring ───────────────────────────────────────────────
+
+from langgraph.graph import StateGraph, END
+from langgraph.checkpoint.memory import MemorySaver
+from backend.agents.state import BootState
+from backend.agents.genesis.rule_extractor import (
+    extract_rules_from_bylaws,
+    tag_ambiguous_rules,
+)
+
+
+def _route_after_mode(state: dict[str, Any]) -> str:
+    if state.get("error"):
+        return END
+    if state["node_type"] == "solo":
+        return "collect_owner_profile"
+    return "register_founders"
+
+
+def _route_after_founders(state: dict[str, Any]) -> str:
+    if state.get("error"):
+        return END
+    mode = state.get("mode")
+    if mode == GenesisMode.LEGACY_IMPORT.value:
+        return "extract_rules"
+    return "browse_templates"
+
+
+def deploy_identity(state: dict[str, Any]) -> dict[str, Any]:
+    """STUB: Deploy CoopIdentity.sol and mint founder SBTs."""
+    if state.get("error"):
+        return state
+    founders = state.get("founder_confirmations", {})
+    sbt_ids = list(range(1, len(founders) + 1))
+    return {
+        **state,
+        "founder_sbt_ids": sbt_ids,
+        "boot_phase": "identity-deployed",
+        "action_log": _append_action(
+            state, "deploy_coop_identity",
+            f"STUB: CoopIdentity.sol deployed. Minted {len(sbt_ids)} founder SBTs.",
+            EthicalImpactLevel.HIGH,
+            payload={"sbt_ids": sbt_ids, "founder_count": len(founders)},
+        ),
+    }
+
+
+def deploy_safe(state: dict[str, Any]) -> dict[str, Any]:
+    """STUB: Deploy Gnosis Safe with all founders as N-of-N owners."""
+    if state.get("error"):
+        return state
+    founders = state.get("founder_confirmations", {})
+    stub_safe = "0x" + "5" * 40
+    return {
+        **state,
+        "safe_address": stub_safe,
+        "boot_phase": "safe-deployed",
+        "action_log": _append_action(
+            state, "deploy_gnosis_safe",
+            f"STUB: Gnosis Safe deployed at {stub_safe}. Threshold: {len(founders)}-of-{len(founders)}.",
+            EthicalImpactLevel.HIGH,
+            payload={"safe_address": stub_safe, "threshold": len(founders)},
+        ),
+    }
+
+
+def browse_templates(state: dict[str, Any]) -> dict[str, Any]:
+    """STUB: Query LibraryManager for governance templates."""
+    if state.get("error"):
+        return state
+    return {
+        **state,
+        "boot_phase": "browsing-templates",
+        "action_log": _append_action(state, "browse_governance_templates", "STUB: Queried LibraryManager for governance templates."),
+    }
+
+
+def select_template(state: dict[str, Any]) -> dict[str, Any]:
+    """STUB: Human selects a governance template."""
+    if state.get("error"):
+        return state
+    return {
+        **state,
+        "boot_phase": "template-selected",
+        "action_log": _append_action(state, "select_governance_template", f"STUB: Template selected (CID: {state.get('skeleton_template_cid', 'none')})."),
+    }
+
+
+def propose_novel_fields(state: dict[str, Any]) -> dict[str, Any]:
+    """Package novel fields as KnowledgeAsset proposals."""
+    if state.get("error"):
+        return state
+    extracted = state.get("extracted_rules", [])
+    novel = [r for r in extracted if r.get("is_novel_field")]
+    return {
+        **state,
+        "boot_phase": "novel-fields-proposed",
+        "action_log": _append_action(
+            state, "propose_novel_fields",
+            f"Proposed {len(novel)} novel field(s) as KnowledgeAsset candidates. STUB.",
+            EthicalImpactLevel.MEDIUM,
+            payload={"novel_count": len(novel)},
+        ),
+    }
+
+
+def execute_genesis_binding(state: dict[str, Any]) -> dict[str, Any]:
+    """The one-way trip — cooperative genesis binding. STUB for Web3."""
+    if state.get("error"):
+        return state
+
+    from backend.governance.policy_engine import PolicyEngine
+    manifest = state.get("genesis_manifest")
+    if manifest:
+        engine = PolicyEngine.get_instance()
+        _loaded_manifest, load_action = engine.load_manifest(manifest_dict=manifest)
+        action_log = state.get("action_log", []) + [load_action.model_dump()]
+    else:
+        action_log = state.get("action_log", [])
+
+    return {
+        **state,
+        "boot_complete": True,
+        "boot_phase": "genesis-complete",
+        "action_log": _append_action(
+            {**state, "action_log": action_log},
+            "execute_genesis_binding",
+            "STUB: Genesis binding executed. PolicyEngine loaded. Web3 steps deferred.",
+            EthicalImpactLevel.HIGH,
+            payload={"manifest_version": manifest.get("version") if manifest else None, "boot_complete": True},
+        ),
+    }
+
+
+def execute_solo_genesis(state: dict[str, Any]) -> dict[str, Any]:
+    """The one-way trip — solo genesis binding (lightweight). STUB."""
+    if state.get("error"):
+        return state
+
+    from backend.governance.policy_engine import PolicyEngine
+    manifest = state.get("genesis_manifest")
+    if manifest:
+        engine = PolicyEngine.get_instance()
+        _loaded_manifest, load_action = engine.load_manifest(manifest_dict=manifest)
+        action_log = state.get("action_log", []) + [load_action.model_dump()]
+    else:
+        action_log = state.get("action_log", [])
+
+    return {
+        **state,
+        "boot_complete": True,
+        "boot_phase": "genesis-complete",
+        "action_log": _append_action(
+            {**state, "action_log": action_log},
+            "execute_solo_genesis",
+            "STUB: Solo genesis binding executed. PolicyEngine loaded. Constitution.sol deferred.",
+            EthicalImpactLevel.HIGH,
+            payload={"boot_complete": True},
+        ),
+    }
+
+
+def build_genesis_graph():
+    """Build and compile the Genesis Boot Sequence StateGraph."""
+    graph = StateGraph(BootState)
+
+    # Add nodes
+    graph.add_node("select_mode", select_mode)
+    graph.add_node("collect_owner_profile", collect_owner_profile)
+    graph.add_node("configure_solo_manifest", configure_solo_manifest)
+    graph.add_node("owner_review", lambda state: {**state, "requires_human_token": True, "boot_phase": "owner-review"})
+    graph.add_node("execute_solo_genesis", execute_solo_genesis)
+    graph.add_node("register_founders", register_founders)
+    graph.add_node("deploy_identity", deploy_identity)
+    graph.add_node("deploy_safe", deploy_safe)
+    graph.add_node("extract_rules", extract_rules_from_bylaws)
+    graph.add_node("tag_ambiguous", tag_ambiguous_rules)
+    graph.add_node("browse_templates", browse_templates)
+    graph.add_node("select_template", select_template)
+    graph.add_node("propose_novel_fields", propose_novel_fields)
+    graph.add_node("inject_regulatory_layer", inject_regulatory_layer)
+    graph.add_node("compile_genesis_manifest", compile_genesis_manifest)
+    graph.add_node("validate_genesis_manifest", validate_genesis_manifest)
+    graph.add_node("confirm_mappings", lambda state: {**state, "requires_human_token": True, "boot_phase": "confirm-mappings"})
+    graph.add_node("ratify_genesis", lambda state: {**state, "requires_human_token": True, "boot_phase": "ratify-genesis"})
+    graph.add_node("execute_genesis_binding", execute_genesis_binding)
+
+    # Entry
+    graph.set_entry_point("select_mode")
+
+    # Edges
+    graph.add_conditional_edges("select_mode", _route_after_mode)
+    graph.add_edge("collect_owner_profile", "inject_regulatory_layer")
+    graph.add_conditional_edges(
+        "inject_regulatory_layer",
+        lambda s: "configure_solo_manifest" if s.get("node_type") == "solo" else "compile_genesis_manifest",
+    )
+    graph.add_edge("configure_solo_manifest", "validate_genesis_manifest")
+    graph.add_conditional_edges(
+        "validate_genesis_manifest",
+        lambda s: "owner_review" if s.get("node_type") == "solo" else "confirm_mappings",
+    )
+    graph.add_edge("owner_review", "execute_solo_genesis")
+    graph.add_edge("execute_solo_genesis", END)
+
+    graph.add_edge("register_founders", "deploy_identity")
+    graph.add_edge("deploy_identity", "deploy_safe")
+    graph.add_conditional_edges("deploy_safe", _route_after_founders)
+    graph.add_edge("extract_rules", "tag_ambiguous")
+    graph.add_edge("tag_ambiguous", "inject_regulatory_layer")
+    graph.add_edge("browse_templates", "select_template")
+    graph.add_edge("select_template", "inject_regulatory_layer")
+    graph.add_edge("compile_genesis_manifest", "validate_genesis_manifest")
+    graph.add_edge("confirm_mappings", "propose_novel_fields")
+    graph.add_edge("propose_novel_fields", "ratify_genesis")
+    graph.add_edge("ratify_genesis", "execute_genesis_binding")
+    graph.add_edge("execute_genesis_binding", END)
+
+    checkpointer = MemorySaver()
+    return graph.compile(
+        checkpointer=checkpointer,
+        interrupt_before=["owner_review", "confirm_mappings", "ratify_genesis"],
+    )
