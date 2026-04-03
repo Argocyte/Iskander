@@ -1,0 +1,172 @@
+"""
+InitializerAgent — LangGraph StateGraph for the Genesis Boot Sequence.
+
+Two paths: solo (SOLO_NODE) and cooperative (LEGACY_IMPORT / NEW_FOUNDING).
+Identity first, governance second. All founding decisions require
+unanimous consent (N-of-N).
+
+GLASS BOX: Every node appends an AgentAction to state["action_log"].
+GENESIS CRITICAL: Not interruptible by agents_are_paused().
+"""
+from __future__ import annotations
+
+import json
+import logging
+from pathlib import Path
+from typing import Any
+
+from backend.config import settings
+from backend.schemas.genesis import GenesisMode, GovernanceTier
+from backend.schemas.glass_box import AgentAction, EthicalImpactLevel
+
+logger = logging.getLogger(__name__)
+
+AGENT_ID = "initializer-agent-v1"
+
+
+def _append_action(
+    state: dict[str, Any],
+    action: str,
+    rationale: str,
+    impact: EthicalImpactLevel = EthicalImpactLevel.LOW,
+    payload: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Build an AgentAction and return updated action_log."""
+    agent_action = AgentAction(
+        agent_id=AGENT_ID,
+        action=action,
+        rationale=rationale,
+        ethical_impact=impact,
+        payload=payload or {},
+    )
+    return state.get("action_log", []) + [agent_action.model_dump()]
+
+
+def select_mode(state: dict[str, Any]) -> dict[str, Any]:
+    """Read mode from state and set node_type."""
+    if state.get("error"):
+        return state
+
+    if state.get("boot_complete"):
+        return {
+            **state,
+            "error": "Genesis already complete. Boot sequence cannot be re-run.",
+        }
+
+    mode = state.get("mode")
+    if mode == GenesisMode.SOLO_NODE.value:
+        node_type = "solo"
+    else:
+        node_type = "cooperative"
+
+    return {
+        **state,
+        "node_type": node_type,
+        "boot_phase": "mode-selected",
+        "action_log": _append_action(
+            state,
+            "select_genesis_mode",
+            f"Genesis mode selected: {mode}. Node type: {node_type}.",
+            payload={"mode": mode, "node_type": node_type},
+        ),
+    }
+
+
+def collect_owner_profile(state: dict[str, Any]) -> dict[str, Any]:
+    """Solo mode: validate owner profile is present in state."""
+    if state.get("error"):
+        return state
+
+    profile = state.get("owner_profile")
+    if not profile:
+        return {
+            **state,
+            "error": "Solo mode requires owner_profile in state.",
+        }
+
+    return {
+        **state,
+        "boot_phase": "owner-profile-collected",
+        "action_log": _append_action(
+            state,
+            "collect_owner_profile",
+            f"Solo node owner profile collected: DID={profile.get('did', 'unknown')}.",
+            payload={"owner_did": profile.get("did")},
+        ),
+    }
+
+
+def inject_regulatory_layer(state: dict[str, Any]) -> dict[str, Any]:
+    """Load jurisdiction-specific regulatory layer from templates directory."""
+    if state.get("error"):
+        return state
+
+    profile = state.get("owner_profile") or state.get("coop_profile") or {}
+    jurisdiction = profile.get("jurisdiction", settings.genesis_default_jurisdiction)
+
+    templates_dir = Path(settings.genesis_regulatory_templates_dir)
+    template_path = templates_dir / f"{jurisdiction}.json"
+
+    if not template_path.exists():
+        logger.warning(
+            "Regulatory template not found for '%s', falling back to UNIVERSAL",
+            jurisdiction,
+        )
+        template_path = templates_dir / "UNIVERSAL.json"
+        jurisdiction = "UNIVERSAL"
+
+    with open(template_path) as f:
+        regulatory_data = json.load(f)
+
+    regulatory_data["non_overridable"] = True
+
+    return {
+        **state,
+        "regulatory_layer": regulatory_data,
+        "boot_phase": "regulatory-layer-injected",
+        "action_log": _append_action(
+            state,
+            "inject_regulatory_layer",
+            f"Loaded regulatory layer for jurisdiction '{jurisdiction}': "
+            f"{len(regulatory_data.get('rules', []))} rule(s). Non-overridable.",
+            EthicalImpactLevel.MEDIUM,
+            payload={
+                "jurisdiction": jurisdiction,
+                "rule_count": len(regulatory_data.get("rules", [])),
+            },
+        ),
+    }
+
+
+def configure_solo_manifest(state: dict[str, Any]) -> dict[str, Any]:
+    """Build minimal GovernanceManifest for solo node: CCIN core + regulatory layer."""
+    if state.get("error"):
+        return state
+
+    regulatory_layer = state.get("regulatory_layer") or {}
+    regulatory_rules = regulatory_layer.get("rules", [])
+
+    manifest = {
+        "version": 1,
+        "constitutional_core": [
+            "anti_extractive",
+            "democratic_control",
+            "transparency",
+            "open_membership",
+        ],
+        "policies": regulatory_rules,
+    }
+
+    return {
+        **state,
+        "genesis_manifest": manifest,
+        "boot_phase": "solo-manifest-configured",
+        "action_log": _append_action(
+            state,
+            "configure_solo_manifest",
+            f"Solo manifest configured with {len(regulatory_rules)} regulatory rule(s) "
+            f"+ CCIN constitutional core.",
+            EthicalImpactLevel.MEDIUM,
+            payload={"policy_count": len(regulatory_rules)},
+        ),
+    }

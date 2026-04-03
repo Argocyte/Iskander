@@ -181,3 +181,88 @@ class TestRegulatoryTemplates:
         with open(self.TEMPLATES_DIR / "GB.json") as f:
             data = json.load(f)
         assert data["jurisdiction"] == "GB"
+
+
+# ── Task 9: Solo Path Nodes ──────────────────────────────────────────────────
+
+from backend.agents.genesis.initializer_agent import (
+    select_mode,
+    collect_owner_profile,
+    inject_regulatory_layer,
+    configure_solo_manifest,
+)
+from backend.schemas.genesis import GenesisMode
+
+
+def _solo_initial_state() -> dict:
+    return {
+        "messages": [],
+        "agent_id": "initializer-agent-v1",
+        "action_log": [],
+        "error": None,
+        "mode": GenesisMode.SOLO_NODE.value,
+        "node_type": None,
+        "coop_profile": None,
+        "owner_profile": None,
+        "skeleton_template_cid": None,
+        "extracted_rules": [],
+        "mapping_confirmations": {},
+        "founder_confirmations": {},
+        "ambiguous_rules": [],
+        "regulatory_layer": None,
+        "genesis_manifest": None,
+        "constitution_cid": None,
+        "genesis_manifest_cid": None,
+        "founding_tx_hash": None,
+        "founder_sbt_ids": [],
+        "safe_address": None,
+        "boot_phase": "pre-genesis",
+        "boot_complete": False,
+        "requires_human_token": False,
+    }
+
+
+class TestSoloPathNodes:
+    def test_select_mode_sets_node_type_solo(self):
+        state = _solo_initial_state()
+        result = select_mode(state)
+        assert result["node_type"] == "solo"
+        assert len(result["action_log"]) == 1
+
+    def test_collect_owner_profile(self):
+        state = _solo_initial_state()
+        state["owner_profile"] = {
+            "did": "did:key:owner123",
+            "address": "0x" + "a" * 40,
+            "name": "Alice",
+            "jurisdiction": "GB",
+        }
+        result = collect_owner_profile(state)
+        assert result["owner_profile"]["did"] == "did:key:owner123"
+        assert result["boot_phase"] == "owner-profile-collected"
+
+    def test_inject_regulatory_layer_loads_jurisdiction(self):
+        state = _solo_initial_state()
+        state["owner_profile"] = {"jurisdiction": "GB"}
+        result = inject_regulatory_layer(state)
+        assert result["regulatory_layer"] is not None
+        assert result["regulatory_layer"]["jurisdiction"] == "GB"
+        assert result["regulatory_layer"]["non_overridable"] is True
+
+    def test_inject_regulatory_layer_fallback_universal(self):
+        state = _solo_initial_state()
+        state["owner_profile"] = {"jurisdiction": "XX"}
+        result = inject_regulatory_layer(state)
+        assert result["regulatory_layer"]["jurisdiction"] == "UNIVERSAL"
+
+    def test_configure_solo_manifest(self):
+        state = _solo_initial_state()
+        state["regulatory_layer"] = {
+            "jurisdiction": "GB",
+            "rules": [{"rule_id": "reg_test", "metadata": {"_regulatory": True}}],
+            "non_overridable": True,
+        }
+        result = configure_solo_manifest(state)
+        assert result["genesis_manifest"] is not None
+        assert result["genesis_manifest"]["version"] == 1
+        assert len(result["genesis_manifest"]["policies"]) >= 1
