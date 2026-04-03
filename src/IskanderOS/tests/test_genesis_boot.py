@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import pytest
 
+from backend.schemas.compliance import PolicyRule, ConstraintType
 from backend.schemas.genesis import (
     GenesisMode,
     GovernanceTier,
@@ -89,3 +90,34 @@ class TestRegulatoryLayer:
             non_overridable=False,
         )
         assert layer.non_overridable is True
+
+
+class TestPolicyRuleMetadata:
+    def test_metadata_default_empty_dict(self):
+        rule = PolicyRule(
+            rule_id="test",
+            description="test rule",
+            constraint_type=ConstraintType.MAX_VALUE,
+            value="10",
+        )
+        assert rule.metadata == {}
+
+    def test_metadata_regulatory_marker(self):
+        rule = PolicyRule(
+            rule_id="reg_test",
+            description="regulatory rule",
+            constraint_type=ConstraintType.MAX_VALUE,
+            value="100",
+            metadata={"_regulatory": True, "non_overridable": True},
+        )
+        assert rule.metadata["_regulatory"] is True
+
+    def test_metadata_ambiguous_marker(self):
+        rule = PolicyRule(
+            rule_id="ambig_test",
+            description="ambiguous rule",
+            constraint_type=ConstraintType.REQUIRE_APPROVAL,
+            value="payment",
+            metadata={"_ambiguous": True},
+        )
+        assert rule.metadata["_ambiguous"] is True
