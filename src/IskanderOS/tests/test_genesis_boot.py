@@ -400,3 +400,37 @@ class TestRuleExtractor:
         state["extracted_rules"] = []
         result = tag_ambiguous_rules(state)
         assert result["ambiguous_rules"] == []
+
+
+# ── Task 12: StateGraph Wiring ───────────────────────────────────────────────
+
+from backend.agents.genesis.initializer_agent import build_genesis_graph
+
+
+class TestGenesisGraph:
+    def test_graph_compiles(self):
+        graph = build_genesis_graph()
+        assert graph is not None
+
+    def test_solo_mode_skips_cooperative_ceremony(self):
+        graph = build_genesis_graph()
+        state = _solo_initial_state()
+        state["owner_profile"] = {
+            "did": "did:key:solo",
+            "address": "0x" + "a" * 40,
+            "name": "Solo Owner",
+            "jurisdiction": "UNIVERSAL",
+        }
+        config = {"configurable": {"thread_id": "test-solo-1"}}
+        graph.invoke(state, config=config)
+        snapshot = graph.get_state(config)
+        result = snapshot.values
+        assert result["node_type"] == "solo"
+        assert result["regulatory_layer"] is not None
+        assert result["genesis_manifest"] is not None
+
+    def test_boot_complete_latch_prevents_rerun(self):
+        state = _solo_initial_state()
+        state["boot_complete"] = True
+        result = select_mode(state)
+        assert result.get("error") is not None or result.get("boot_complete") is True
