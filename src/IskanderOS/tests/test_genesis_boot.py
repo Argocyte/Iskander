@@ -363,3 +363,40 @@ class TestCooperativePathNodes:
         result = validate_genesis_manifest(state)
         assert result["error"] is not None
         assert "CCIN" in result["error"]
+
+
+# ── Task 11: Rule Extractor ──────────────────────────────────────────────────
+
+from backend.agents.genesis.rule_extractor import (
+    extract_rules_from_bylaws,
+    tag_ambiguous_rules,
+)
+
+
+class TestRuleExtractor:
+    def test_extract_rules_returns_list(self):
+        state = _coop_initial_state()
+        state["extracted_rules"] = [
+            {"rule_id": "pay_ratio", "source_text": "Pay ratio 6:1", "proposed_policy_rule": {"rule_id": "pay_ratio", "constraint_type": "MaxValue", "value": "6"}, "confidence": 0.95, "is_ambiguous": False, "is_novel_field": False, "tier": "Operational", "confirmed": False}
+        ]
+        result = extract_rules_from_bylaws(state)
+        assert isinstance(result["extracted_rules"], list)
+        assert len(result["extracted_rules"]) >= 1
+
+    def test_tag_ambiguous_marks_low_confidence(self):
+        state = _coop_initial_state()
+        state["extracted_rules"] = [
+            {"rule_id": "clear_rule", "confidence": 0.9, "is_ambiguous": False},
+            {"rule_id": "vague_rule", "confidence": 0.4, "is_ambiguous": False},
+        ]
+        result = tag_ambiguous_rules(state)
+        rules = {r["rule_id"]: r for r in result["extracted_rules"]}
+        assert rules["clear_rule"]["is_ambiguous"] is False
+        assert rules["vague_rule"]["is_ambiguous"] is True
+        assert "vague_rule" in result["ambiguous_rules"]
+
+    def test_tag_ambiguous_empty_list(self):
+        state = _coop_initial_state()
+        state["extracted_rules"] = []
+        result = tag_ambiguous_rules(state)
+        assert result["ambiguous_rules"] == []
