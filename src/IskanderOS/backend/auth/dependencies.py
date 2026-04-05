@@ -19,8 +19,11 @@ Usage in routers:
 from __future__ import annotations
 
 import logging
+import secrets
 from dataclasses import dataclass
-from typing import Callable
+from typing import Any, Callable
+
+import bcrypt
 
 from fastapi import Depends, Header, HTTPException, Query, status
 
@@ -162,3 +165,32 @@ async def optional_ws_auth(
         member_token_id=payload.member_token_id,
         chain_id=payload.chain_id,
     )
+
+
+# ── Genesis Boot Sequence: Pre-genesis founder authentication ─────────────
+
+
+async def verify_founder_token(
+    x_founder_token: str = Header(..., description="Pre-genesis founder authentication token"),
+) -> dict[str, Any]:
+    """Verify a pre-genesis founder token.
+
+    STUB: In production, queries founder_registrations table and verifies bcrypt hash.
+    """
+    if not x_founder_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing founder token",
+        )
+    return {"token_verified": True, "token": x_founder_token}
+
+
+def generate_founder_token() -> tuple[str, str]:
+    """Generate a new founder token and its bcrypt hash.
+
+    Returns:
+        (plaintext_token, bcrypt_hash)
+    """
+    token = secrets.token_urlsafe(32)
+    hashed = bcrypt.hashpw(token.encode(), bcrypt.gensalt(rounds=12))
+    return token, hashed.decode()
