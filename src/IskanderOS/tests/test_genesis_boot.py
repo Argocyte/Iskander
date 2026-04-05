@@ -404,6 +404,14 @@ class TestRuleExtractor:
 
 # ── Task 12: StateGraph Wiring ───────────────────────────────────────────────
 
+from backend.auth.dependencies import verify_founder_token
+
+
+class TestFounderTokenAuth:
+    def test_verify_founder_token_exists(self):
+        assert callable(verify_founder_token)
+
+
 from backend.agents.genesis.initializer_agent import build_genesis_graph
 
 
