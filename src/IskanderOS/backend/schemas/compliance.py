@@ -144,6 +144,7 @@ class PolicyRule(BaseModel):
         default_factory=list,
         description="Agent IDs this rule constrains. Empty = all agents.",
     )
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Extension metadata. Keys: _regulatory, _ambiguous, non_overridable")
 
 
 class PolicyViolation(BaseModel):

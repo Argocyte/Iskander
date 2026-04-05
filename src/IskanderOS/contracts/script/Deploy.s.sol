@@ -47,6 +47,7 @@ import {MACIVoting}        from "../src/governance/MACIVoting.sol";
 import {StewardshipLedger} from "../src/governance/StewardshipLedger.sol";
 import {ForeignReputation} from "../src/governance/ForeignReputation.sol";
 import {TrustRegistry}     from "../src/governance/TrustRegistry.sol";
+import {Constitution}      from "../src/Constitution.sol";
 
 contract Deploy is Script {
 
@@ -169,6 +170,26 @@ contract Deploy is Script {
         // ── 9. Deploy TrustRegistry (Credential Embassy — issuer key registry) ──
         TrustRegistry trustRegistry = new TrustRegistry(address(identity));
         console2.log("TrustRegistry      :", address(trustRegistry));
+
+        // ── 10. Deploy Constitution (genesis anchor — conditional) ───────────
+        string memory genesisCID = vm.envOr("GENESIS_CID", string(""));
+        string memory constitutionCID = vm.envOr("CONSTITUTION_CID", string(""));
+        uint16 founderCnt = uint16(vm.envOr("FOUNDER_COUNT", uint256(1)));
+
+        Constitution constitution;
+        if (bytes(genesisCID).length > 0) {
+            constitution = new Constitution(
+                genesisCID,
+                constitutionCID,
+                founderCnt,
+                address(identity)
+            );
+            console2.log("Constitution       :", address(constitution));
+
+            // Wire cross-contract reference
+            identity.setConstitution(address(constitution));
+            console2.log("  -> Identity.setConstitution done");
+        }
 
         vm.stopBroadcast();
 
