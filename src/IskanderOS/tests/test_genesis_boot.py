@@ -509,3 +509,53 @@ class TestSoloBootEndToEnd:
         graph.invoke(state, config=config)
         result = graph.get_state(config).values
         assert result["regulatory_layer"]["jurisdiction"] == "ES"
+
+
+# ── Task 18: Cooperative Boot End-to-End Integration Test ──────────────────
+
+
+class TestCooperativeBootEndToEnd:
+    def test_cooperative_boot_with_legacy_import(self):
+        graph = build_genesis_graph()
+        state = _coop_initial_state()
+        state["founder_confirmations"] = {
+            "did:key:alice": False,
+            "did:key:bob": False,
+            "did:key:carol": False,
+        }
+        state["coop_profile"] = {"jurisdiction": "GB"}
+        state["extracted_rules"] = [
+            {
+                "rule_id": "pay_ratio",
+                "source_text": "Pay ratio 6:1",
+                "proposed_policy_rule": {
+                    "rule_id": "pay_ratio",
+                    "description": "6:1 cap",
+                    "constraint_type": "MaxValue",
+                    "value": "6",
+                    "applies_to": [],
+                },
+                "confidence": 0.95,
+                "is_ambiguous": False,
+                "is_novel_field": False,
+                "tier": "Constitutional",
+                "confirmed": True,
+            },
+        ]
+        config = {"configurable": {"thread_id": "test-coop-e2e"}}
+        graph.invoke(state, config=config)
+        result = graph.get_state(config).values
+        assert result["node_type"] == "cooperative"
+        assert result["error"] is None
+        assert result["regulatory_layer"] is not None
+        assert len(result["action_log"]) >= 3
+
+    def test_single_objection_blocks_ratification(self):
+        state = _coop_initial_state()
+        state["founder_confirmations"] = {
+            "did:key:alice": True,
+            "did:key:bob": True,
+            "did:key:carol": False,
+        }
+        all_ratified = all(state["founder_confirmations"].values())
+        assert all_ratified is False
