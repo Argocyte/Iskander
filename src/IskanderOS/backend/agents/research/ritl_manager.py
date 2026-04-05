@@ -175,7 +175,7 @@ def _review_node(
     strengths_map = {
         "Rigor": [f"Asset '{title}' demonstrates methodological clarity."],
         "Novelty": [f"Asset '{title}' addresses an underexplored topic."],
-        "Ethics": [f"Asset '{title}' aligns with CCIN cooperative principles."],
+        "Ethics": [f"Asset '{title}' aligns with ICA Cooperative Principles."],
         "Reproducibility": [f"Asset '{title}' provides sufficient context for reproduction."],
     }
     weaknesses_map = {

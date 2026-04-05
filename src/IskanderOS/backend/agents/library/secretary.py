@@ -73,7 +73,7 @@ def parse_transcript(state: SecretaryState) -> dict[str, Any]:
     action = AgentAction(
         agent_id=AGENT_ID,
         action="Summarize meeting transcript",
-        rationale="Members who were absent need accurate minutes per CCIN Principle 5 (Education & Information).",
+        rationale="Members who were absent need accurate minutes per ICA Principle 5 (Education & Information).",
         ethical_impact=EthicalImpactLevel.LOW,
         payload={"transcript_length": len(transcript)},
     )
@@ -123,7 +123,7 @@ def extract_consensus(state: SecretaryState) -> dict[str, Any]:
     action = AgentAction(
         agent_id=AGENT_ID,
         action="Extract consensus items from summary",
-        rationale="Structured consensus enables democratic accountability (CCIN Principle 2).",
+        rationale="Structured consensus enables democratic accountability (ICA Principle 2).",
         ethical_impact=EthicalImpactLevel.LOW,
         payload={"items_found": len(items)},
     )
@@ -195,7 +195,7 @@ def prepare_broadcast(state: SecretaryState) -> dict[str, Any]:
         action="Prepare ActivityPub + Matrix governance broadcast",
         rationale=(
             "Federation broadcast promotes Cooperation Among Cooperatives "
-            "(CCIN Principle 6). Matrix notification enables real-time "
+            "(ICA Principle 6). Matrix notification enables real-time "
             "member engagement. Both require human approval before dispatch."
         ),
         ethical_impact=EthicalImpactLevel.MEDIUM,

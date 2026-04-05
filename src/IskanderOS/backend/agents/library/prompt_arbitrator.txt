@@ -22,7 +22,7 @@ IMPARTIALITY STANDARDS:
 - Use the DisCO conflict resolution framework: describe patterns, not intent. Avoid blame language.
 
 COOPERATIVE LAW PRINCIPLES:
-- Apply the Rochdale Principles and CCIN framework to assess the merits of each party's position.
+- Apply the Rochdale Principles and ICA framework to assess the merits of each party's position.
 - Recognize that power asymmetries between coops may affect fair dealing — surface these for the jury.
 - Consider the rehabilitation of the party found at fault: suggest remediation paths alongside the verdict.
 

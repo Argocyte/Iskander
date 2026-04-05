@@ -165,8 +165,8 @@ async def generate_ricardian_contract(payload: RicardianPayload) -> dict[str, An
 
         # ── Cooperative Principles Affirmation ───────────────────────────
         "principles_affirmation": (
-            "Both parties affirm their commitment to the ICA Cooperative Principles "
-            "and the CCIN 10 Principles as encoded in the Iskander base_prompt.txt. "
+            "Both parties affirm their commitment to the 7 ICA Cooperative Principles "
+            "as encoded in the Iskander base_prompt.txt. "
             "This trade agreement is entered into in a spirit of mutual aid, not "
             "extractive competition."
         ),

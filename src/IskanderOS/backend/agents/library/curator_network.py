@@ -296,10 +296,10 @@ def efficiency_curator_vote(state: CuratorDebateState) -> dict[str, Any]:
 # ── Node 5: Ethics Curator Vote ───────────────────────────────────────────────
 
 def ethics_curator_vote(state: CuratorDebateState) -> dict[str, Any]:
-    """Evaluate: author consent, community impact, CCIN alignment, care-work.
+    """Evaluate: author consent, community impact, ICA alignment, care-work.
 
     STUB: Heuristic scoring. Production: LLM cross-checks rationale against
-    CCIN principles via ccin_verifier.
+    ICA principles via ica_verifier.
     """
     if state.get("error"):
         return state
@@ -324,7 +324,7 @@ def ethics_curator_vote(state: CuratorDebateState) -> dict[str, Any]:
     vote_value = "approve" if score >= 50 else "reject"
     rationale_text = (
         f"Ethics assessment: score={score}/100. "
-        f"Evaluated CCIN principle alignment for '{proposed}' transition. "
+        f"Evaluated ICA principle alignment for '{proposed}' transition. "
         f"Proposer rationale length: {len(proposer_rationale)} chars. "
         f"{'Adequate justification provided.' if score >= 50 else 'Insufficient ethical justification.'}"
     )

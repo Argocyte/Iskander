@@ -356,13 +356,13 @@ class TestCooperativePathNodes:
         assert result["error"] is None
         assert result["boot_phase"] == "manifest-validated"
 
-    def test_validate_genesis_manifest_missing_ccin(self):
+    def test_validate_genesis_manifest_missing_ica(self):
         state = _coop_initial_state()
         state["genesis_manifest"] = {"version": 1, "constitutional_core": [], "policies": []}
         state["regulatory_layer"] = {"rules": [], "non_overridable": True}
         result = validate_genesis_manifest(state)
         assert result["error"] is not None
-        assert "CCIN" in result["error"]
+        assert "ICA" in result["error"]
 
 
 # ── Task 11: Rule Extractor ──────────────────────────────────────────────────

@@ -27,7 +27,7 @@
 | 9 | `backend/governance/regulatory/__init__.py` | CREATE | Package init |
 | 10 | `backend/governance/regulatory/GB.json` | CREATE | UK BenCom regulatory template |
 | 11 | `backend/governance/regulatory/ES.json` | CREATE | Spain cooperative regulatory template |
-| 12 | `backend/governance/regulatory/UNIVERSAL.json` | CREATE | CCIN-only fallback |
+| 12 | `backend/governance/regulatory/UNIVERSAL.json` | CREATE | ICA-only fallback |
 | 13 | `backend/agents/genesis/__init__.py` | CREATE | Package init |
 | 14 | `backend/agents/genesis/initializer_agent.py` | CREATE | LangGraph boot sequence graph |
 | 15 | `backend/agents/genesis/rule_extractor.py` | CREATE | Template-guided LLM extraction |
@@ -1003,7 +1003,7 @@ class TestRegulatoryTemplates:
             assert isinstance(data["rules"], list)
 
     def test_universal_has_no_jurisdiction_rules(self):
-        """UNIVERSAL template should only have CCIN-derived rules."""
+        """UNIVERSAL template should only have ICA-derived rules."""
         with open(self.TEMPLATES_DIR / "UNIVERSAL.json") as f:
             data = json.load(f)
         assert data["jurisdiction"] == "UNIVERSAL"
@@ -1036,20 +1036,20 @@ Expected: FAIL — files don't exist
   "jurisdiction": "UNIVERSAL",
   "rules": [
     {
-      "rule_id": "reg_ccin_anti_extractive",
-      "description": "CCIN: No agent transaction can benefit a single member at cooperative expense without HITL approval",
+      "rule_id": "reg_ica_anti_extractive",
+      "description": "ICA: No agent transaction can benefit a single member at cooperative expense without HITL approval",
       "constraint_type": "RequireApproval",
       "value": "external_payment,transfer",
       "applies_to": [],
-      "metadata": {"_regulatory": true, "non_overridable": true, "source": "CCIN"}
+      "metadata": {"_regulatory": true, "non_overridable": true, "source": "ICA"}
     },
     {
-      "rule_id": "reg_ccin_democratic_control",
-      "description": "CCIN: No single agent can bypass M-of-N approval for value-moving operations",
+      "rule_id": "reg_ica_democratic_control",
+      "description": "ICA: No single agent can bypass M-of-N approval for value-moving operations",
       "constraint_type": "RequireApproval",
       "value": "governance_change,mint,burn",
       "applies_to": [],
-      "metadata": {"_regulatory": true, "non_overridable": true, "source": "CCIN"}
+      "metadata": {"_regulatory": true, "non_overridable": true, "source": "ICA"}
     }
   ],
   "source_documents": [],
@@ -1065,20 +1065,20 @@ Expected: FAIL — files don't exist
   "jurisdiction": "GB",
   "rules": [
     {
-      "rule_id": "reg_ccin_anti_extractive",
-      "description": "CCIN: No agent transaction can benefit a single member at cooperative expense without HITL approval",
+      "rule_id": "reg_ica_anti_extractive",
+      "description": "ICA: No agent transaction can benefit a single member at cooperative expense without HITL approval",
       "constraint_type": "RequireApproval",
       "value": "external_payment,transfer",
       "applies_to": [],
-      "metadata": {"_regulatory": true, "non_overridable": true, "source": "CCIN"}
+      "metadata": {"_regulatory": true, "non_overridable": true, "source": "ICA"}
     },
     {
-      "rule_id": "reg_ccin_democratic_control",
-      "description": "CCIN: No single agent can bypass M-of-N approval for value-moving operations",
+      "rule_id": "reg_ica_democratic_control",
+      "description": "ICA: No single agent can bypass M-of-N approval for value-moving operations",
       "constraint_type": "RequireApproval",
       "value": "governance_change,mint,burn",
       "applies_to": [],
-      "metadata": {"_regulatory": true, "non_overridable": true, "source": "CCIN"}
+      "metadata": {"_regulatory": true, "non_overridable": true, "source": "ICA"}
     },
     {
       "rule_id": "reg_gb_bencom_annual_return",
@@ -1124,20 +1124,20 @@ Expected: FAIL — files don't exist
   "jurisdiction": "ES",
   "rules": [
     {
-      "rule_id": "reg_ccin_anti_extractive",
-      "description": "CCIN: No agent transaction can benefit a single member at cooperative expense without HITL approval",
+      "rule_id": "reg_ica_anti_extractive",
+      "description": "ICA: No agent transaction can benefit a single member at cooperative expense without HITL approval",
       "constraint_type": "RequireApproval",
       "value": "external_payment,transfer",
       "applies_to": [],
-      "metadata": {"_regulatory": true, "non_overridable": true, "source": "CCIN"}
+      "metadata": {"_regulatory": true, "non_overridable": true, "source": "ICA"}
     },
     {
-      "rule_id": "reg_ccin_democratic_control",
-      "description": "CCIN: No single agent can bypass M-of-N approval for value-moving operations",
+      "rule_id": "reg_ica_democratic_control",
+      "description": "ICA: No single agent can bypass M-of-N approval for value-moving operations",
       "constraint_type": "RequireApproval",
       "value": "governance_change,mint,burn",
       "applies_to": [],
-      "metadata": {"_regulatory": true, "non_overridable": true, "source": "CCIN"}
+      "metadata": {"_regulatory": true, "non_overridable": true, "source": "ICA"}
     },
     {
       "rule_id": "reg_es_mondragon_pay_ratio",
@@ -1464,7 +1464,7 @@ def inject_regulatory_layer(state: dict[str, Any]) -> dict[str, Any]:
 
 
 def configure_solo_manifest(state: dict[str, Any]) -> dict[str, Any]:
-    """Build minimal GovernanceManifest for solo node: CCIN core + regulatory layer."""
+    """Build minimal GovernanceManifest for solo node: ICA core + regulatory layer."""
     if state.get("error"):
         return state
 
@@ -1490,7 +1490,7 @@ def configure_solo_manifest(state: dict[str, Any]) -> dict[str, Any]:
             state,
             "configure_solo_manifest",
             f"Solo manifest configured with {len(regulatory_rules)} regulatory rule(s) "
-            f"+ CCIN constitutional core.",
+            f"+ ICA constitutional core.",
             EthicalImpactLevel.MEDIUM,
             payload={"policy_count": len(regulatory_rules)},
         ),
@@ -1638,17 +1638,17 @@ class TestCooperativePathNodes:
         assert result["error"] is None
         assert result["boot_phase"] == "manifest-validated"
 
-    def test_validate_genesis_manifest_missing_ccin(self):
+    def test_validate_genesis_manifest_missing_ica(self):
         state = _coop_initial_state()
         state["genesis_manifest"] = {
             "version": 1,
-            "constitutional_core": [],  # Missing CCIN
+            "constitutional_core": [],  # Missing ICA
             "policies": [],
         }
         state["regulatory_layer"] = {"rules": [], "non_overridable": True}
         result = validate_genesis_manifest(state)
         assert result["error"] is not None
-        assert "CCIN" in result["error"]
+        assert "ICA" in result["error"]
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1752,7 +1752,7 @@ def compile_genesis_manifest(state: dict[str, Any]) -> dict[str, Any]:
 # Node: validate_genesis_manifest (both paths)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-REQUIRED_CCIN = {"anti_extractive", "democratic_control", "transparency", "open_membership"}
+REQUIRED_ICA = {"anti_extractive", "democratic_control", "transparency", "open_membership"}
 
 
 def validate_genesis_manifest(state: dict[str, Any]) -> dict[str, Any]:
@@ -1764,13 +1764,13 @@ def validate_genesis_manifest(state: dict[str, Any]) -> dict[str, Any]:
     if not manifest:
         return {**state, "error": "No genesis manifest to validate."}
 
-    # Check CCIN constitutional core
+    # Check ICA constitutional core
     core = set(manifest.get("constitutional_core", []))
-    missing_ccin = REQUIRED_CCIN - core
-    if missing_ccin:
+    missing_ica = REQUIRED_ICA - core
+    if missing_ica:
         return {
             **state,
-            "error": f"CCIN constitutional core incomplete. Missing: {missing_ccin}",
+            "error": f"ICA constitutional core incomplete. Missing: {missing_ica}",
         }
 
     # Check version
@@ -1784,12 +1784,12 @@ def validate_genesis_manifest(state: dict[str, Any]) -> dict[str, Any]:
             state,
             "validate_genesis_manifest",
             f"Genesis manifest validated: version={manifest['version']}, "
-            f"CCIN core complete, {len(manifest.get('policies', []))} policy rule(s).",
+            f"ICA core complete, {len(manifest.get('policies', []))} policy rule(s).",
             EthicalImpactLevel.MEDIUM,
             payload={
                 "version": manifest["version"],
                 "policy_count": len(manifest.get("policies", [])),
-                "ccin_complete": True,
+                "ica_complete": True,
             },
         ),
     }

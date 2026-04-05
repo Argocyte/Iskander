@@ -122,7 +122,7 @@ def check_mondragon_ratio(state: TreasuryState) -> dict[str, Any]:
             rationale=(
                 f"Proposed payment {proposed_amount} / lowest pay {lowest_pay} "
                 f"= {computed_ratio:.2f}:1, exceeding cap of {ratio_cap}:1.  "
-                f"CCIN Principle 9 (Pay Equity) violated.  Payment blocked."
+                f"Mondragon pay equity ratio violated.  Payment blocked."
             ),
             ethical_impact=EthicalImpactLevel.HIGH,
             payload=check_result,

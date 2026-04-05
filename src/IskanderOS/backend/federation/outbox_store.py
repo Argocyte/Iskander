@@ -125,7 +125,7 @@ class OutboxStore:
             action=f"publish({activity.get('type', '?')})",
             rationale=(
                 "Outbound ActivityPub activity published to federated sister cooperatives. "
-                "CCIN Principle 6: Cooperation Among Cooperatives."
+                "ICA Principle 6: Cooperation Among Cooperatives."
             ),
             ethical_impact=EthicalImpactLevel.HIGH,
             payload={

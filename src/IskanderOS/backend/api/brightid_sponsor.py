@@ -10,7 +10,7 @@ DESIGN RATIONALE (Anti-Wealth-Gating):
   BrightID requires a small sponsorship transaction to activate a new user's
   verification. Without this backend, members would need to acquire tokens
   and interact with smart contracts directly — creating a de facto wealth
-  barrier that contradicts CCIN Principle 1 (Voluntary & Open Membership).
+  barrier that contradicts ICA Principle 1 (Voluntary & Open Membership).
 
   This endpoint absorbs the cost via the cooperative's shared treasury,
   ensuring that a baker who has never touched a blockchain wallet can join

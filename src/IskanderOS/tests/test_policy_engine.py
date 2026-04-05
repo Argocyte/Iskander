@@ -1,5 +1,5 @@
 """
-Tests for the PolicyEngine — governance-as-code with CCIN Constitutional Core.
+Tests for the PolicyEngine — governance-as-code with ICA Constitutional Core.
 
 Covers:
   - Manifest loading and CID anchoring
@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from backend.governance.policy_engine import CCIN_PRINCIPLES, PolicyEngine
+from backend.governance.policy_engine import ICA_PRINCIPLES, PolicyEngine
 from backend.schemas.compliance import (
     ConstraintType,
     GovernanceManifest,
@@ -239,15 +239,15 @@ class TestAgentScopedRules:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# CONSTITUTIONAL CORE (CCIN) — IMMUTABLE CHECKS
+# CONSTITUTIONAL CORE (ICA) — IMMUTABLE CHECKS
 # ═════════════════════════════════════════════════════════════════════════════
 
 
 class TestConstitutionalCore:
-    """Tests proving CCIN checks cannot be overridden by manifest changes."""
+    """Tests proving ICA checks cannot be overridden by manifest changes."""
 
     def test_anti_extractive_blocks_external_payment(self):
-        """External payments without HITL approval are blocked by CCIN."""
+        """External payments without HITL approval are blocked by ICA."""
         engine = _load_engine()
         result, _action = engine.check_compliance(
             agent_id="treasurer-agent-v1",
@@ -260,13 +260,13 @@ class TestConstitutionalCore:
             },
         )
         assert result.constitutional_checks_passed is False
-        ccin_violations = [
-            v for v in result.violations if v.rule_id == "ccin_anti_extractive"
+        ica_violations = [
+            v for v in result.violations if v.rule_id == "ica_anti_extractive"
         ]
-        assert len(ccin_violations) == 1
+        assert len(ica_violations) == 1
 
     def test_anti_extractive_passes_with_hitl(self):
-        """External payments WITH HITL approval pass the CCIN check."""
+        """External payments WITH HITL approval pass the ICA check."""
         engine = _load_engine()
         result, _action = engine.check_compliance(
             agent_id="treasurer-agent-v1",
@@ -278,13 +278,13 @@ class TestConstitutionalCore:
                 "hitl_approved": True,
             },
         )
-        ccin_violations = [
-            v for v in result.violations if v.rule_id == "ccin_anti_extractive"
+        ica_violations = [
+            v for v in result.violations if v.rule_id == "ica_anti_extractive"
         ]
-        assert len(ccin_violations) == 0
+        assert len(ica_violations) == 0
 
     def test_democratic_control_blocks_hitl_bypass(self):
-        """Attempting to bypass HITL is blocked by CCIN."""
+        """Attempting to bypass HITL is blocked by ICA."""
         engine = _load_engine()
         result, _action = engine.check_compliance(
             agent_id="treasurer-agent-v1",
@@ -292,13 +292,13 @@ class TestConstitutionalCore:
             params={"bypass_hitl": True},
         )
         assert result.constitutional_checks_passed is False
-        ccin_violations = [
-            v for v in result.violations if v.rule_id == "ccin_democratic_control"
+        ica_violations = [
+            v for v in result.violations if v.rule_id == "ica_democratic_control"
         ]
-        assert len(ccin_violations) == 1
+        assert len(ica_violations) == 1
 
     def test_transparency_blocks_anonymous_agent(self):
-        """Empty agent_id is blocked by CCIN transparency check."""
+        """Empty agent_id is blocked by ICA transparency check."""
         engine = _load_engine()
         result, _action = engine.check_compliance(
             agent_id="",  # anonymous
@@ -306,13 +306,13 @@ class TestConstitutionalCore:
             params={},
         )
         assert result.constitutional_checks_passed is False
-        ccin_violations = [
-            v for v in result.violations if v.rule_id == "ccin_transparency"
+        ica_violations = [
+            v for v in result.violations if v.rule_id == "ica_transparency"
         ]
-        assert len(ccin_violations) == 1
+        assert len(ica_violations) == 1
 
     def test_open_membership_blocks_discriminatory_params(self):
-        """Params with discriminatory fields are blocked by CCIN."""
+        """Params with discriminatory fields are blocked by ICA."""
         engine = _load_engine()
         result, _action = engine.check_compliance(
             agent_id="treasurer-agent-v1",
@@ -320,16 +320,16 @@ class TestConstitutionalCore:
             params={"gender": "male", "amount": 100},
         )
         assert result.constitutional_checks_passed is False
-        ccin_violations = [
-            v for v in result.violations if v.rule_id == "ccin_open_membership"
+        ica_violations = [
+            v for v in result.violations if v.rule_id == "ica_open_membership"
         ]
-        assert len(ccin_violations) == 1
+        assert len(ica_violations) == 1
 
     def test_constitutional_core_cannot_be_overridden(self):
-        """Even a manifest with NO rules cannot disable CCIN checks.
+        """Even a manifest with NO rules cannot disable ICA checks.
 
         This is the key test: removing all manifest policies does NOT
-        disable the constitutional core. CCIN checks are hardcoded.
+        disable the constitutional core. ICA checks are hardcoded.
         """
         # Load a manifest with zero policies
         engine = _load_engine(manifest_dict={
@@ -348,16 +348,16 @@ class TestConstitutionalCore:
                 "bypass_hitl": True,
             },
         )
-        # CCIN still fires even with empty manifest
+        # ICA still fires even with empty manifest
         assert result.constitutional_checks_passed is False
         assert len(result.violations) >= 2  # at least anti-extractive + democratic_control
 
-    def test_ccin_principles_exist(self):
-        """All four CCIN principles are defined."""
-        assert "anti_extractive" in CCIN_PRINCIPLES
-        assert "democratic_control" in CCIN_PRINCIPLES
-        assert "transparency" in CCIN_PRINCIPLES
-        assert "open_membership" in CCIN_PRINCIPLES
+    def test_ica_principles_exist(self):
+        """All four ICA principles are defined."""
+        assert "anti_extractive" in ICA_PRINCIPLES
+        assert "democratic_control" in ICA_PRINCIPLES
+        assert "transparency" in ICA_PRINCIPLES
+        assert "open_membership" in ICA_PRINCIPLES
 
 
 # ═════════════════════════════════════════════════════════════════════════════
