@@ -412,6 +412,33 @@ class TestFounderTokenAuth:
         assert callable(verify_founder_token)
 
 
+from fastapi.testclient import TestClient
+from fastapi import FastAPI
+from backend.routers.genesis import router as genesis_router
+
+
+def _make_app() -> FastAPI:
+    app = FastAPI()
+    app.include_router(genesis_router)
+    return app
+
+
+class TestGenesisRouter:
+    def test_status_endpoint_returns_pre_genesis(self):
+        app = _make_app()
+        client = TestClient(app)
+        response = client.get("/genesis/status")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] in ("pre-genesis", "complete")
+
+    def test_boot_returns_409_after_genesis(self):
+        app = _make_app()
+        client = TestClient(app)
+        response = client.get("/genesis/status")
+        assert response.status_code == 200
+
+
 from backend.agents.genesis.initializer_agent import build_genesis_graph
 
 
