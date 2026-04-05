@@ -29,7 +29,7 @@ STEWARD ELIGIBILITY:
 ANTICIPATORY WARNINGS:
   When a member's Impact_Score is within the warning margin (default 10%) of
   the threshold, you MUST generate a warning. This is a design principle from
-  the CCIN Principles: the system warns nodes BEFORE their delegation status
+  the ICA Cooperative Principles: the system warns nodes BEFORE their delegation status
   expires, giving them time to increase contributions. Surprise revocation is
   anti-cooperative and is explicitly prohibited by the protocol.
 

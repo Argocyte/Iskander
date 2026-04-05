@@ -105,7 +105,7 @@ class VetoRequest(BaseModel):
     )
     cited_principles: list[str] = Field(
         default_factory=list,
-        description="CCIN Principles cited as violated (e.g., ['P1', 'P5']).",
+        description="ICA Cooperative Principles cited as violated (e.g., ['P1', 'P5']).",
     )
 
 
@@ -133,9 +133,9 @@ class CouncilRationaleRequest(BaseModel):
     rationale_ipfs_cid: str = Field(
         ..., description="IPFS CID of the full rationale document.",
     )
-    ccin_principles: list[str] = Field(
+    ica_principles: list[str] = Field(
         default_factory=list,
-        description="CCIN Principles this decision supports.",
+        description="ICA Cooperative Principles this decision supports.",
     )
 
 

@@ -654,20 +654,20 @@ CREATE TABLE IF NOT EXISTS council_rationale (
     description         TEXT NOT NULL,
     rationale_ipfs_cid  TEXT NOT NULL,       -- Full rationale on IPFS
     submitted_by        TEXT NOT NULL,       -- DID of the steward
-    ccin_principles     TEXT[],              -- CCIN Principles this decision supports
+    ica_principles      TEXT[],              -- ICA Cooperative Principles this decision supports
     agent_action_id     UUID REFERENCES agent_actions(id),
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Emergency veto filings mirrored from on-chain events.
--- Any member can veto a Council decision by citing CCIN Principle violations.
+-- Any member can veto a Council decision by citing ICA Principle violations.
 CREATE TABLE IF NOT EXISTS veto_records (
     id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     proposal_id         TEXT NOT NULL,
     vetoer_did          TEXT NOT NULL,
     vetoer_address      TEXT NOT NULL,
     rationale_ipfs_cid  TEXT NOT NULL,       -- Glass Box: full rationale on IPFS
-    cited_principles    TEXT[],              -- CCIN Principles cited as violated
+    cited_principles    TEXT[],              -- ICA Cooperative Principles cited as violated
     status              TEXT NOT NULL DEFAULT 'filed'
                         CHECK (status IN ('filed', 'under_review', 'upheld', 'dismissed')),
     tx_hash             TEXT,
@@ -760,10 +760,10 @@ CREATE INDEX IF NOT EXISTS idx_fiat_operations_status
     ON fiat_operations (status);
 
 -- ══════════════════════════════════════════════════════════════════════════════
--- Fix 2: CCIN Verification Log
--- Second-pass adversarial rationale verification against CCIN principles.
+-- Fix 2: ICA Verification Log
+-- Second-pass adversarial rationale verification against ICA Cooperative Principles.
 -- ══════════════════════════════════════════════════════════════════════════════
-CREATE TABLE IF NOT EXISTS ccin_verification_log (
+CREATE TABLE IF NOT EXISTS ica_verification_log (
     id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     agent_action_id     UUID REFERENCES agent_actions(id),
     violation_score     INTEGER NOT NULL CHECK (violation_score BETWEEN 0 AND 100),
@@ -774,10 +774,10 @@ CREATE TABLE IF NOT EXISTS ccin_verification_log (
     payload_hash        TEXT,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX IF NOT EXISTS idx_ccin_log_score
-    ON ccin_verification_log (violation_score DESC);
-CREATE INDEX IF NOT EXISTS idx_ccin_log_action
-    ON ccin_verification_log (agent_action_id);
+CREATE INDEX IF NOT EXISTS idx_ica_log_score
+    ON ica_verification_log (violation_score DESC);
+CREATE INDEX IF NOT EXISTS idx_ica_log_action
+    ON ica_verification_log (agent_action_id);
 
 -- Periodic solvency snapshots for audit trail.
 CREATE TABLE IF NOT EXISTS solvency_snapshots (

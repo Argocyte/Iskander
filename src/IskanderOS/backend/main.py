@@ -15,7 +15,7 @@ app = FastAPI(
     title="Project Iskander — Sovereign Node API",
     description=(
         "Agentic AI operating system for DisCOs and Platform Co-ops. "
-        "Implements the Solidarity Stack and CCIN Principles."
+        "Implements the Solidarity Stack and ICA Cooperative Principles."
     ),
     version="0.1.0",
     docs_url="/docs",

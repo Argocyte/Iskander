@@ -55,6 +55,9 @@ py_ecc==7.0.1
 siwe==4.2.0
 python-jose[cryptography]==3.3.0
 
+# ─── Genesis Boot Sequence ────────────────────────────────────────────────────
+bcrypt==4.2.0
+
 # ─── Utilities ────────────────────────────────────────────────────────────────
 python-dotenv==1.0.1
 structlog==24.4.0

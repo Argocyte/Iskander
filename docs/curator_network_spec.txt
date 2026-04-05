@@ -13,7 +13,7 @@ The network consists of three specialized, competing Agents:
     - **Goal:** Optimize for node performance, low energy usage, and modern standards.
     - **Trigger:** Assets consuming high resources or violating modern schema versions.
 2.  **Ethical/Compliance Curator (`curator-ethics-v1`):**
-    - **Goal:** Audit against 10 CCIN Principles.
+    - **Goal:** Audit against 7 ICA Cooperative Principles.
     - **Trigger:** Assets with "toxic" rationale, security vulnerabilities, or anti-cooperative patterns.
 3.  **Resilience Curator (`curator-res-v1`):**
     - **Goal:** Maintain anti-fragility and historical depth.

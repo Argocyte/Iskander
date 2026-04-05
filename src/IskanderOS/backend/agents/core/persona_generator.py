@@ -41,8 +41,8 @@ def generate_persona_block(profile: CoopProfile) -> str:
         Multi-line persona description ready for prompt injection.
     """
     principles_list = "\n".join(
-        f"  • {p}" for p in profile.ccin_principles
-    ) if profile.ccin_principles else "  • (none specified)"
+        f"  • {p}" for p in profile.ica_principles
+    ) if profile.ica_principles else "  • (none specified)"
 
     members_list = ", ".join(profile.founding_members) if profile.founding_members else "(none listed)"
 
@@ -55,7 +55,7 @@ def generate_persona_block(profile: CoopProfile) -> str:
         f"Pay-ratio cap: **{profile.pay_ratio}:1** (Mondragon model).  No "
         f"internal payment may violate this ratio.\n\n"
         f"Founding members: {members_list}\n\n"
-        f"Ratified CCIN principles:\n{principles_list}"
+        f"Ratified ICA Cooperative Principles:\n{principles_list}"
     )
 
 

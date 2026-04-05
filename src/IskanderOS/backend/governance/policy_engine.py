@@ -1,12 +1,12 @@
 """
-policy_engine.py — Governance-as-code with immutable CCIN Constitutional Core.
+policy_engine.py — Governance-as-code with immutable ICA Constitutional Core.
 
 The PolicyEngine reads a ``governance_manifest.json`` and exposes a single
 ``check_compliance(agent_id, action_type, params)`` gate that every agent
 MUST call before drafting any proposal, payment, or governance action.
 
 CONSTITUTIONAL CORE:
-  Four hardcoded CCIN checks run AFTER manifest checks and CANNOT be
+  Four hardcoded ICA checks run AFTER manifest checks and CANNOT be
   overridden by manifest updates:
     1. Anti-extractive — no tx benefits one member at collective expense
     2. Democratic control — no single agent bypasses M-of-N approval
@@ -42,12 +42,12 @@ logger = logging.getLogger(__name__)
 
 AGENT_ID = "policy-engine-v1"
 
-# ── Constitutional Core (CCIN) ────────────────────────────────────────────────
+# ── Constitutional Core (ICA) ─────────────────────────────────────────────────
 # These are CODE-LEVEL invariants. The governance manifest can add rules on top
 # but can NEVER weaken or remove these. Updating them requires a code release —
 # deliberate, auditable friction per SYS-3.
 
-CCIN_PRINCIPLES = {
+ICA_PRINCIPLES = {
     "anti_extractive": (
         "No transaction can benefit a single member at the expense of the collective. "
         "Transfers to non-cooperative addresses require M-of-N approval."
@@ -187,7 +187,7 @@ class PolicyEngine:
         action_type: str,
         params: dict[str, Any],
     ) -> tuple[PolicyCheckResult, AgentAction]:
-        """Check an agent action against the governance manifest + CCIN core.
+        """Check an agent action against the governance manifest + ICA core.
 
         This is the Compliance_Gate that all agents must pass through.
 
@@ -222,7 +222,7 @@ class PolicyEngine:
             if violation is not None:
                 violations.append(violation)
 
-        # ── Phase 2: Constitutional Core (CCIN) ──────────────────────────────
+        # ── Phase 2: Constitutional Core (ICA) ───────────────────────────────
         # These run AFTER manifest rules and CANNOT be overridden.
         constitutional_passed = self._check_constitutional_core(
             agent_id, action_type, params, violations
@@ -366,7 +366,7 @@ class PolicyEngine:
         return None
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # CONSTITUTIONAL CORE (CCIN) — HARDCODED, IMMUTABLE
+    # CONSTITUTIONAL CORE (ICA) — HARDCODED, IMMUTABLE
     # ═══════════════════════════════════════════════════════════════════════════
 
     @staticmethod
@@ -376,7 +376,7 @@ class PolicyEngine:
         params: dict[str, Any],
         violations: list[PolicyViolation],
     ) -> bool:
-        """Run hardcoded CCIN constitutional checks.
+        """Run hardcoded ICA constitutional checks.
 
         These CANNOT be overridden or weakened by governance manifest updates.
         The manifest can only ADD constraints on top of these.
@@ -385,7 +385,7 @@ class PolicyEngine:
         """
         passed = True
 
-        # ── CCIN-1: Anti-extractive ──────────────────────────────────────────
+        # ── ICA-1: Anti-extractive ───────────────────────────────────────────
         # No single-beneficiary extraction without collective approval
         if action_type in ("payment", "transfer", "mint"):
             amount = params.get("amount") or params.get("value_wei") or 0
@@ -400,66 +400,66 @@ class PolicyEngine:
             # External payments above zero require HITL (anti-extractive gate)
             if is_external and amount > 0 and not params.get("hitl_approved", False):
                 violations.append(PolicyViolation(
-                    rule_id="ccin_anti_extractive",
-                    description=CCIN_PRINCIPLES["anti_extractive"],
+                    rule_id="ica_anti_extractive",
+                    description=ICA_PRINCIPLES["anti_extractive"],
                     constraint_type=ConstraintType.REQUIRE_APPROVAL,
                     threshold="0",
                     actual_value=str(amount),
                     message=(
-                        f"CCIN Anti-Extractive: External {action_type} of {amount} "
+                        f"ICA Anti-Extractive: External {action_type} of {amount} "
                         f"to '{beneficiary}' requires M-of-N human approval. "
                         f"This constitutional check cannot be overridden."
                     ),
                 ))
                 passed = False
 
-        # ── CCIN-2: Democratic control ───────────────────────────────────────
+        # ── ICA-2: Democratic control ────────────────────────────────────────
         # Value-moving operations must declare HITL routing
         if action_type in ("payment", "transfer", "mint", "burn"):
             if params.get("bypass_hitl", False):
                 violations.append(PolicyViolation(
-                    rule_id="ccin_democratic_control",
-                    description=CCIN_PRINCIPLES["democratic_control"],
+                    rule_id="ica_democratic_control",
+                    description=ICA_PRINCIPLES["democratic_control"],
                     constraint_type=ConstraintType.DENY,
                     threshold="bypass_hitl=False",
                     actual_value="bypass_hitl=True",
                     message=(
-                        "CCIN Democratic Control: Cannot bypass HITL for "
+                        "ICA Democratic Control: Cannot bypass HITL for "
                         f"'{action_type}' operations. This constitutional check "
                         "cannot be overridden."
                     ),
                 ))
                 passed = False
 
-        # ── CCIN-3: Transparency ─────────────────────────────────────────────
+        # ── ICA-3: Transparency ──────────────────────────────────────────────
         # Every proposal must include an agent_id (Glass Box requirement)
         if not agent_id:
             violations.append(PolicyViolation(
-                rule_id="ccin_transparency",
-                description=CCIN_PRINCIPLES["transparency"],
+                rule_id="ica_transparency",
+                description=ICA_PRINCIPLES["transparency"],
                 constraint_type=ConstraintType.REQUIRE_APPROVAL,
                 threshold="agent_id required",
                 actual_value="<empty>",
                 message=(
-                    "CCIN Transparency: All actions must identify the proposing "
+                    "ICA Transparency: All actions must identify the proposing "
                     "agent. Anonymous proposals are blocked."
                 ),
             ))
             passed = False
 
-        # ── CCIN-4: Open membership ──────────────────────────────────────────
+        # ── ICA-4: Open membership ───────────────────────────────────────────
         # Proposals cannot filter by protected identity attributes
         discriminatory_fields = {"ethnicity", "gender", "age", "religion", "nationality"}
         used_discriminatory = discriminatory_fields & set(params.keys())
         if used_discriminatory:
             violations.append(PolicyViolation(
-                rule_id="ccin_open_membership",
-                description=CCIN_PRINCIPLES["open_membership"],
+                rule_id="ica_open_membership",
+                description=ICA_PRINCIPLES["open_membership"],
                 constraint_type=ConstraintType.DENY,
                 threshold="no identity discrimination",
                 actual_value=str(used_discriminatory),
                 message=(
-                    f"CCIN Open Membership: Proposal contains discriminatory "
+                    f"ICA Open Membership: Proposal contains discriminatory "
                     f"fields: {used_discriminatory}. Agent proposals cannot "
                     f"filter by protected identity attributes."
                 ),

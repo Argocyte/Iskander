@@ -143,7 +143,7 @@ def search_cooperative_vendors(state: ProcurementState) -> dict[str, Any]:
         agent_id=AGENT_ID,
         action=f"Vendor search: {len(candidates)} candidates found",
         rationale=(
-            "CCIN Principle 6 (Cooperation Among Cooperatives) — "
+            "ICA Principle 6 (Cooperation Among Cooperatives) — "
             "cooperative vendors searched first."
         ),
         ethical_impact=EthicalImpactLevel.LOW,
@@ -182,7 +182,7 @@ def rank_and_select_vendor(state: ProcurementState) -> dict[str, Any]:
         action=f"Selected vendor: {selected.get('name', 'unknown')} (tier {selected.get('tier')})",
         rationale=(
             f"Vendor selected from {len(ranked)} candidates.  "
-            f"{'CONVENTIONAL vendor — all cooperative alternatives exhausted.  Requires human approval.' if is_conventional else 'Cooperative/solidarity vendor preferred per CCIN Principle 6.'}"
+            f"{'CONVENTIONAL vendor — all cooperative alternatives exhausted.  Requires human approval.' if is_conventional else 'Cooperative/solidarity vendor preferred per ICA Principle 6.'}"
         ),
         ethical_impact=impact,
         payload={"vendor": selected.get("name"), "tier": selected.get("tier")},
