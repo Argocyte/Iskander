@@ -1147,3 +1147,51 @@ CREATE TABLE IF NOT EXISTS vc_verification_log (
 
 CREATE INDEX IF NOT EXISTS idx_vc_log_issuer ON vc_verification_log (issuer_did);
 CREATE INDEX IF NOT EXISTS idx_vc_log_valid ON vc_verification_log (valid);
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- Genesis Boot Sequence (Phase: Genesis)
+-- ═══════════════════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS genesis_state (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    mode            TEXT CHECK (mode IN ('solo_node', 'legacy_import', 'new_founding')),
+    node_type       TEXT CHECK (node_type IN ('cooperative', 'solo')),
+    boot_phase      TEXT NOT NULL DEFAULT 'pre-genesis',
+    boot_complete   BOOLEAN NOT NULL DEFAULT FALSE,
+    genesis_manifest_cid TEXT,
+    constitution_cid     TEXT,
+    founding_tx_hash     TEXT,
+    safe_address         TEXT,
+    thread_id            TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    completed_at    TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS founder_registrations (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    did             TEXT NOT NULL UNIQUE,
+    address         TEXT NOT NULL,
+    name            TEXT NOT NULL,
+    founder_token_hash TEXT NOT NULL,
+    sbt_token_id    INTEGER,
+    ratified        BOOLEAN NOT NULL DEFAULT FALSE,
+    registered_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_founder_registrations_did ON founder_registrations(did);
+
+CREATE TABLE IF NOT EXISTS regulatory_updates (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    source_federation_did TEXT NOT NULL,
+    legislation_reference TEXT NOT NULL,
+    severity        TEXT NOT NULL CHECK (severity IN ('Advisory', 'Mandatory', 'Urgent')),
+    effective_date  TIMESTAMPTZ NOT NULL,
+    proposed_rules  JSONB NOT NULL DEFAULT '[]'::jsonb,
+    affected_rule_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+    ingested_via    TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'pending'
+                    CHECK (status IN ('pending', 'approved', 'rejected')),
+    agent_action_id UUID REFERENCES agent_actions(id),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    resolved_at     TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_regulatory_updates_status ON regulatory_updates(status);

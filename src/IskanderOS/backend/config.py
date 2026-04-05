@@ -325,4 +325,12 @@ class Settings(BaseSettings):
     vc_max_attestations_per_holder: int = 100
 
 
+    # ── Genesis Boot Sequence ───────────────────────────────────────────────
+    genesis_default_jurisdiction: str = "UNIVERSAL"
+    genesis_min_founders: int = 3
+    genesis_regulatory_templates_dir: str = "backend/governance/regulatory"
+    genesis_boot_complete_file: str = ".genesis_complete"
+    genesis_founder_token_bcrypt_rounds: int = 12
+
+
 settings = Settings()

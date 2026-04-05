@@ -1,0 +1,46 @@
+{
+  "jurisdiction": "ES",
+  "rules": [
+    {
+      "rule_id": "reg_ccin_anti_extractive",
+      "description": "CCIN: No agent transaction can benefit a single member at cooperative expense without HITL approval",
+      "constraint_type": "RequireApproval",
+      "value": "external_payment,transfer",
+      "applies_to": [],
+      "metadata": {"_regulatory": true, "non_overridable": true, "source": "CCIN"}
+    },
+    {
+      "rule_id": "reg_ccin_democratic_control",
+      "description": "CCIN: No single agent can bypass M-of-N approval for value-moving operations",
+      "constraint_type": "RequireApproval",
+      "value": "governance_change,mint,burn",
+      "applies_to": [],
+      "metadata": {"_regulatory": true, "non_overridable": true, "source": "CCIN"}
+    },
+    {
+      "rule_id": "reg_es_mondragon_pay_ratio",
+      "description": "Mondragon cooperative convention: maximum pay ratio 6:1 (highest to lowest)",
+      "constraint_type": "MaxValue",
+      "value": "6",
+      "applies_to": ["treasurer-agent-v1"],
+      "metadata": {"_regulatory": true, "non_overridable": true, "source": "Mondragon_Statutes"}
+    },
+    {
+      "rule_id": "reg_es_asamblea_general",
+      "description": "Ley 27/1999 Art.21: General Assembly is the supreme governing body",
+      "constraint_type": "RequireApproval",
+      "value": "governance_change,dissolution",
+      "applies_to": [],
+      "metadata": {"_regulatory": true, "non_overridable": true, "source": "Ley27_1999_Art21"}
+    }
+  ],
+  "source_documents": [
+    {
+      "reference": "Ley 27/1999, de 16 de julio, de Cooperativas",
+      "cid": null,
+      "ingested_at": "2026-03-17T00:00:00Z"
+    }
+  ],
+  "non_overridable": true,
+  "update_history": []
+}

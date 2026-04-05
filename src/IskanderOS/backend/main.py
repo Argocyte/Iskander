@@ -70,6 +70,8 @@ from backend.routers.fiat                  import router as fiat_router
 from backend.routers.knowledge             import router as knowledge_router
 # Diplomatic Embassy: Foreign Reputation System, Ingestion Embassy, RITL Peer Review
 from backend.routers.diplomacy             import router as diplomacy_router
+# Genesis Boot Sequence — one-way cooperative initialization
+from backend.routers.genesis               import router as genesis_router
 
 app.include_router(constitution_router)
 app.include_router(federation_router)
@@ -110,6 +112,8 @@ app.include_router(fiat_router)                 # /fiat/mint, /fiat/burn, /fiat/
 app.include_router(knowledge_router)            # /knowledge/register, /knowledge/curate, /knowledge/break-glass
 # Diplomatic Embassy: FRS, quarantine sandbox, RITL peer review
 app.include_router(diplomacy_router)            # /diplomacy/sdc, /diplomacy/ingest, /diplomacy/research
+# Genesis Boot Sequence — one-way cooperative initialization
+app.include_router(genesis_router)          # /genesis/status, /genesis/boot, /genesis/founders, etc.
 
 
 @app.get("/health", tags=["system"])
