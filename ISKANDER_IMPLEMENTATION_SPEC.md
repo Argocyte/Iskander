@@ -458,7 +458,7 @@ Stored verbatim in `agent_actions` table; NEVER truncated.
 | `impact_scores` | 23 | Stewardship scores | `node_did, impact_score NUMERIC(5,4), is_eligible_steward, pushed_on_chain` |
 | `delegation_events` | 23 | Delegation mirror | `event_type CHECK(delegate/revoke/auto_revoke)` |
 | `steward_threshold_history` | 23 | Threshold audit | `threshold_value, proposed_by, rationale` |
-| `council_rationale` | 23 | Council Glass Box | `rationale_ipfs_cid, ccin_principles TEXT[]` |
+| `council_rationale` | 23 | Council Glass Box | `rationale_ipfs_cid, ica_principles TEXT[]` |
 | `veto_records` | 23 | Emergency veto | `cited_principles TEXT[], status CHECK(filed/under_review/upheld/dismissed)` |
 | `energy_events` | 24 | Energy state log | `level CHECK(GREEN/YELLOW/RED), previous_level, action_taken` |
 | `causal_events` | 25 | IPFS event log | `ipfs_cid, audience CHECK(federation/council/node), on_chain_anchor` |

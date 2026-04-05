@@ -832,7 +832,7 @@ Build the one-way initialization sequence that onboards a cooperative's (or indi
 
 ### Architecture
 
-- **Three-tier governance model**: Constitutional Core (CCIN, code-level immutable) → Genesis + Amendments (on-chain CIDs via Constitution.sol, ⅔ supermajority) → Operational Policy (governance_manifest.json, steward consensus)
+- **Three-tier governance model**: Constitutional Core (ICA, code-level immutable) → Genesis + Amendments (on-chain CIDs via Constitution.sol, ⅔ supermajority) → Operational Policy (governance_manifest.json, steward consensus)
 - **Regulatory Layer**: Permanent jurisdictional floor (GB, ES, UNIVERSAL templates). Rules can only be tightened, never relaxed. Federations push `RegulatoryUpdate` messages via ActivityPub.
 - **InitializerAgent**: LangGraph StateGraph with solo path (owner profile → regulatory layer → manifest → HITL review → genesis binding) and cooperative path (register founders → deploy CoopIdentity/SBTs → deploy Safe → extract/select rules → HITL rule confirmation → compile manifest → HITL ratification → genesis binding)
 - **Constitution.sol**: Minimal on-chain anchor storing `genesisCIDHash`, `constitutionCIDHash`, `ratifiedAt`, `founderCount`, `coopIdentity`. Deliberately minimal — governance logic lives in PolicyEngine, not on-chain.
@@ -860,7 +860,7 @@ Build the one-way initialization sequence that onboards a cooperative's (or indi
 | `backend/agents/genesis/initializer_agent.py` | LangGraph StateGraph — full boot sequence graph with 18 nodes |
 | `backend/agents/genesis/rule_extractor.py` | Template-guided LLM bylaw extraction + ambiguity tagging |
 | `backend/governance/regulatory/__init__.py` | Package init |
-| `backend/governance/regulatory/UNIVERSAL.json` | CCIN-only regulatory layer (fallback) |
+| `backend/governance/regulatory/UNIVERSAL.json` | ICA-only regulatory layer (fallback) |
 | `backend/governance/regulatory/GB.json` | UK BenCom regulatory layer |
 | `backend/governance/regulatory/ES.json` | Spain/Basque cooperative regulatory layer |
 | `contracts/src/Constitution.sol` | Immutable on-chain genesis anchor |

@@ -128,7 +128,7 @@ def validate_claim(state: ContributionStateV2) -> dict[str, Any]:
         action=f"Accept opt-in claim: stream='{stream}', witness='{raw.get('witness_did', '?')}'",
         rationale=(
             "Phase 17: Member self-declares contribution stream per DisCO three-stream "
-            "model (CCIN Principle 8). No passive chat scraping. No LLM re-classification "
+            "model per DisCO three-stream framework. No passive chat scraping. No LLM re-classification "
             "of human intent. The cooperative trusts its members."
         ),
         ethical_impact=EthicalImpactLevel.LOW,
@@ -167,7 +167,7 @@ def validate_member(state: ContributionStateV2) -> dict[str, Any]:
     action = AgentAction(
         agent_id=AGENT_ID,
         action="Validate member identity",
-        rationale="CCIN Principle 1 (Voluntary & Open Membership) — only verified members may log contributions.",
+        rationale="ICA Principle 1 (Voluntary & Open Membership) — only verified members may log contributions.",
         ethical_impact=EthicalImpactLevel.LOW,
         payload={"member_did": member_did, "valid": valid},
     )
@@ -299,7 +299,6 @@ def quantify_care_work(state: ContributionStateV2) -> dict[str, Any]:
         agent_id=AGENT_ID,
         action=f"Quantify contribution: {base_hours}h × {multiplier_used}x = {care_score} SCP",
         rationale=(
-            "CCIN Principle 10 (Feminist Economics & Care Valorization). "
             "Care work multipliers ensure invisible labor is properly credited."
         ),
         ethical_impact=EthicalImpactLevel.LOW,
@@ -479,10 +478,10 @@ def write_ledger_entry(state: ContributionStateV2) -> dict[str, Any]:
         agent_id=AGENT_ID,
         action="Prepare contribution ledger entry (ZK-privacy mode)",
         rationale=(
-            "Contributory accounting record per DisCO framework (CCIN Principle 8). "
+            "Contributory accounting record per DisCO framework. "
             "Care work rationale replaced with ZK proof — raw conversational context purged."
             if stream == "care"
-            else "Contributory accounting record per DisCO framework (CCIN Principle 8)."
+            else "Contributory accounting record per DisCO framework."
         ),
         ethical_impact=EthicalImpactLevel.MEDIUM,
         payload={k: v for k, v in entry.items() if k != "zk_proof"},  # Don't log proof in action log.

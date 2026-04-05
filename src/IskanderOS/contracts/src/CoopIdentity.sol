@@ -27,7 +27,7 @@ import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 // No Gitcoin Passport. No wallet-balance-based voting weights. No invasive KYC.
 // BrightID's Web-of-Trust model ensures 1-Member-1-Vote without requiring
 // members to expose government IDs or accumulate on-chain wealth signals.
-// This directly implements CCIN Principle 1 (Voluntary & Open Membership)
+// This directly implements ICA Principle 1 (Voluntary & Open Membership)
 // and Principle 2 (Democratic Member Control — one member, one vote).
 
 /// @dev BrightID verifier interface (deployed on Gnosis Chain; bridgeable to L2s).

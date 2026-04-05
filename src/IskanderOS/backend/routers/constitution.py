@@ -36,7 +36,7 @@ router = APIRouter(prefix="/constitution", tags=["constitution"])
 
 def _render_constitution(profile: CoopProfile, generated_at: str) -> str:
     principles_block = "\n".join(
-        f"- {p}" for p in profile.ccin_principles
+        f"- {p}" for p in profile.ica_principles
     ) or "_(none selected — review before ratification)_"
 
     members_block = "\n".join(
@@ -105,7 +105,7 @@ def _render_constitution(profile: CoopProfile, generated_at: str) -> str:
 
         ---
 
-        ## Article V — Committed CCIN Principles
+        ## Article V — Committed ICA Cooperative Principles
 
         {principles_block}
 

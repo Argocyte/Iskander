@@ -33,7 +33,7 @@ class AgentAction(BaseModel):
     ethical_impact: EthicalImpactLevel = Field(..., description="Assessed risk level of this action")
     payload:        dict[str, Any] | None = Field(default=None, description="Action-specific structured data")
     payload_hash:   str | None = Field(default=None, description="SHA-256 of payload at rationale time. Binds rationale to specific data.")
-    ccin_verifier_version: str | None = Field(default=None, description="Version of CCIN verifier that checked this action.")
+    ica_verifier_version: str | None = Field(default=None, description="Version of ICA verifier that checked this action.")
     boundary_provenance: dict[str, Any] | None = Field(default=None, description="Metadata from boundary agent when action originated from foreign SDC data.")
 
 
@@ -57,9 +57,9 @@ class CoopProfile(BaseModel):
     founding_members:   list[str] = Field(..., description="List of founding member DIDs or names")
     pay_ratio:          int = Field(default=6, ge=1, le=20, description="Mondragon pay ratio cap (highest:lowest)")
     mission_statement:  str = Field(..., description="Cooperative's purpose statement")
-    ccin_principles:    list[str] = Field(
+    ica_principles:    list[str] = Field(
         default_factory=list,
-        description="Selected CCIN principles the coop commits to"
+        description="Selected ICA Cooperative Principles the coop commits to"
     )
 
 

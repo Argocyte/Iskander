@@ -101,29 +101,29 @@ function resetEmergencyCircuitBreaker(uint256 actualEscrow) external onlyOracle 
 ### Problem
 `AgentAction.rationale` (glass_box.py line 32) is free-text. All agent nodes (stewardship_scorer.py lines 85-455, fiat_gateway.py lines 99-322) write their own rationales with zero cross-validation.
 
-### Solution: CCIN Compliance Checker + Rationale Hash Binding
+### Solution: ICA Compliance Checker + Rationale Hash Binding
 
 **Files to create/modify**:
 
 | # | File | Action | Change |
 |---|------|--------|--------|
-| 1 | `backend/agents/core/ccin_verifier.py` | CREATE | `verify_rationale(action: AgentAction) -> CCINVerdict` — second-pass LLM call that scores rationale against 10 CCIN principles. Returns violation score 0-100 |
+| 1 | `backend/agents/core/ica_verifier.py` | CREATE | `verify_rationale(action: AgentAction) -> ICAVerdict` — second-pass LLM call that scores rationale against 7 ICA Cooperative Principles. Returns violation score 0-100 |
 | 2 | `backend/schemas/glass_box.py` | MODIFY | Add `payload_hash: str` field to `AgentAction` — SHA-256 of the payload at time of rationale writing. Binds rationale to specific data |
 | 3 | `backend/agents/library/stewardship_scorer.py` | MODIFY | After each AgentAction creation, call `verify_rationale()`. If violation_score > 25, set `error` in state and halt graph |
 | 4 | `backend/agents/library/fiat_gateway.py` | MODIFY | Same pattern |
-| 5 | `infra/init.sql` | MODIFY | Add `ccin_verification_log` table: `agent_action_id FK, violation_score, flagged_principles TEXT[], verifier_model` |
+| 5 | `infra/init.sql` | MODIFY | Add `ica_verification_log` table: `agent_action_id FK, violation_score, flagged_principles TEXT[], verifier_model` |
 
 **Design**:
 ```python
-# backend/agents/core/ccin_verifier.py
-CCIN_VERIFICATION_PROMPT = """
-You are a CCIN Compliance Auditor. Given an agent's action and rationale,
-score it against the 10 CCIN Cooperative Principles.
+# backend/agents/core/ica_verifier.py
+ICA_VERIFICATION_PROMPT = """
+You are a ICA Compliance Auditor. Given an agent's action and rationale,
+score it against the 7 ICA Cooperative Principles.
 Output JSON: {"violation_score": 0-100, "flagged_principles": [...], "explanation": "..."}
 A score of 0 = fully compliant. A score > 25 = HALT the action.
 """
 
-async def verify_rationale(action: AgentAction) -> CCINVerdict:
+async def verify_rationale(action: AgentAction) -> ICAVerdict:
     # Uses a DIFFERENT model instance than the action-generating agent
     # to prevent self-rationalization
     ...
@@ -133,29 +133,29 @@ async def verify_rationale(action: AgentAction) -> CCINVerdict:
 
 **`payload_hash` binding**: The rationale is cryptographically bound to the payload data. If the payload changes after the rationale is written, the hash mismatch is detected.
 
-### AMENDMENT (Gemini R2): Compliance Drift — Versioned CCIN Definitions
+### AMENDMENT (Gemini R2): Compliance Drift — Versioned ICA Definitions
 
-**Second-order risk**: Over time, the CCIN verification prompt may be tuned to be more permissive. Past actions that were "compliant" under v1 may be non-compliant under v2, but the audit trail doesn't record which version was used.
+**Second-order risk**: Over time, the ICA verification prompt may be tuned to be more permissive. Past actions that were "compliant" under v1 may be non-compliant under v2, but the audit trail doesn't record which version was used.
 
-**Fix**: Add `ccin_verifier_version: str` to both `AgentAction` and `ccin_verification_log`.
+**Fix**: Add `ica_verifier_version: str` to both `AgentAction` and `ica_verification_log`.
 
 ```python
-# backend/agents/core/ccin_verifier.py
-CCIN_VERIFIER_VERSION = "1.0.0"  # Bumped on every prompt change
+# backend/agents/core/ica_verifier.py
+ICA_VERIFIER_VERSION = "1.0.0"  # Bumped on every prompt change
 
-async def verify_rationale(action: AgentAction) -> CCINVerdict:
+async def verify_rationale(action: AgentAction) -> ICAVerdict:
     verdict = await _run_verification(action)
-    verdict.verifier_version = CCIN_VERIFIER_VERSION
+    verdict.verifier_version = ICA_VERIFIER_VERSION
     return verdict
 ```
 
 **Additional schema changes**:
 | # | File | Action | Change |
 |---|------|--------|--------|
-| 6 | `backend/schemas/glass_box.py` | MODIFY | Add `ccin_verifier_version: str | None` to `AgentAction` |
-| 7 | `infra/init.sql` | MODIFY | Add `verifier_version TEXT` column to `ccin_verification_log` |
+| 6 | `backend/schemas/glass_box.py` | MODIFY | Add `ica_verifier_version: str | None` to `AgentAction` |
+| 7 | `infra/init.sql` | MODIFY | Add `verifier_version TEXT` column to `ica_verification_log` |
 
-**Governance rule**: CCIN prompt changes require the same HITL approval as steward threshold changes. The version history is stored in `ccin_verification_log` so auditors can retroactively evaluate compliance drift.
+**Governance rule**: ICA prompt changes require the same HITL approval as steward threshold changes. The version history is stored in `ica_verification_log` so auditors can retroactively evaluate compliance drift.
 
 ---
 
@@ -434,7 +434,7 @@ class HITLRateLimiter:
 |----------|-----|---------------|---------------------|
 | 1 | Oracle Timelock (Fix 1) | 4 files | Medium — Solidity state changes + tests |
 | 2 | HITL Rate Limiter (Fix 6) | 5 files | Low — Python middleware |
-| 3 | CCIN Verifier (Fix 2) | 5 files | Medium — New LLM call + schema change |
+| 3 | ICA Verifier (Fix 2) | 5 files | Medium — New LLM call + schema change |
 | 4 | Federated Pinning (Fix 3) | 6 files | Medium — Async broadcast + receipts |
 | 5 | Chain-Anchored Sync (Fix 4) | 3 files | Low — Validation logic |
 | 6 | Signed Sensors (Fix 5) | 3 files | Low — Fallback logic |
@@ -449,7 +449,7 @@ class HITLRateLimiter:
 - `forge test` — new tests: `test_proposeOracle_timelock`, `test_acceptOracle_before_timelock_reverts`, `test_acceptOracle_wrong_sender_reverts`, `test_proposeOracle_then_accept`
 - Verify `setOracle()` is removed or deprecated
 
-### Fix 2 (CCIN Verifier)
+### Fix 2 (ICA Verifier)
 - Unit test: craft an `AgentAction` with contradictory rationale (e.g., action="mint 1M tokens", rationale="aligned with anti-extractive principles") → verify `violation_score > 25`
 - Unit test: craft a legitimate action → verify `violation_score < 10`
 
@@ -740,7 +740,7 @@ Three cross-cutting emergency protocols added based on Gemini's second-order vul
 
 | Fix | Vulnerability | Amendment |
 |-----|--------------|-----------|
-| **CCIN Version Tracking** | Compliance drift — prompt updates silently change compliance definition | `ccin_verifier_version` stored in every `AgentAction` + `ccin_verification_log` |
+| **ICA Version Tracking** | Compliance drift — prompt updates silently change compliance definition | `ica_verifier_version` stored in every `AgentAction` + `ica_verification_log` |
 | **Batched Anchoring** | Gas price censorship — poor nodes can't afford on-chain anchors | Merkle-Root-as-a-Service batches CIDs into single tx per 60s window |
 | **Legacy Hardware Mode** | Hard brick of old Hearth PCBs on signature format change | 180-day grace period with degradation path (GREEN → YELLOW) |
 | **Trust Penalty Gaming** (R3) | Attacker farms trust via benign Follow/Announce, exploits for governance attack | Interaction-class weighting: low-risk activities earn 25% trust recovery |
@@ -755,13 +755,13 @@ Three cross-cutting emergency protocols added based on Gemini's second-order vul
 |----------|-----|---------------|------------|-------|
 | 1 | Oracle Timelock + Emergency Bypass (Fix 1) | 7 Solidity files | Medium-High | R1+R2 |
 | 2 | HITL Rate Limiter + Crisis Mode (Fix 6) | 7 Python files | Low-Medium | R1+R2 |
-| 3 | CCIN Verifier + Version Tracking (Fix 2) | 7 Python files | Medium | R1+R2 |
+| 3 | ICA Verifier + Version Tracking (Fix 2) | 7 Python files | Medium | R1+R2 |
 | 4 | **Boundary Agent / Embassy (Fix 7)** | **13 Python/SQL files** | **Medium-High** | **R3** |
 | 5 | Federated Pinning + Geo-Diversity (Fix 3) | 9 files | Medium-High | R1+R2 |
 | 6 | Chain-Anchored Sync + Batch Anchoring (Fix 4) | 5 files | Medium | R1+R2 |
 | 7 | Signed Sensors + Legacy Mode (Fix 5) | 4 Python files | Low | R1+R2 |
 
-**Rationale for Fix 7 at position 4**: Must come after CCIN Verifier (Fix 3) because the Governance Verifier checks whether foreign nodes have Glass Box/CCIN capabilities. Must come before Federated Pinning (Fix 5) because trust quarantine should gate DeltaSync before replication enforcement is added.
+**Rationale for Fix 7 at position 4**: Must come after ICA Verifier (Fix 3) because the Governance Verifier checks whether foreign nodes have Glass Box/ICA capabilities. Must come before Federated Pinning (Fix 5) because trust quarantine should gate DeltaSync before replication enforcement is added.
 
 **Total files**: ~52 across all 7 fixes
 
@@ -773,7 +773,7 @@ After implementing all 7 fixes, send these to Gemini for fourth-round review:
 
 1. **Emergency Bypass**: "Can a compromised-but-unanimous multi-sig abuse `triggerEmergencyCircuitBreaker()` to permanently DoS the system by keeping the breaker tripped? Should there be a maximum duration before auto-reset?"
 2. **Crisis Mode**: "If an attacker can trigger crisis mode (e.g., by filing a frivolous EmergencyVeto), they get 100x rate limit expansion. Is this an amplification vector? Should crisis mode require multi-sig confirmation?"
-3. **CCIN Versioning**: "If a cooperative forks the CCIN principles (legitimate governance evolution), should the verifier support multiple active principle sets simultaneously?"
+3. **ICA Versioning**: "If a cooperative forks the ICA principles (legitimate governance evolution), should the verifier support multiple active principle sets simultaneously?"
 4. **Geo-Diversity**: "How do we handle a cooperative with only 3 nodes all in the same city? Should `mesh_require_geo_diversity` gracefully degrade to 'best effort' with a warning rather than blocking pins?"
 5. **Batch Anchoring**: "If the batcher accumulates 1000 CIDs before flush, and the Merkle proof is on-chain, can any node verify inclusion of their specific CID without reconstructing the full tree? (Standard Merkle proof inclusion — confirm this is implemented)"
 6. **Legacy Hardware**: "180-day grace period is generous. But what if a cooperative in the Global South can't afford new hardware? Should the grace period be extendable by cooperative vote?"
@@ -1163,7 +1163,7 @@ Stored verbatim in `agent_actions` table; NEVER truncated.
 | `impact_scores` | 23 | Stewardship scores | `node_did, impact_score NUMERIC(5,4), is_eligible_steward, pushed_on_chain` |
 | `delegation_events` | 23 | Delegation mirror | `event_type CHECK(delegate/revoke/auto_revoke)` |
 | `steward_threshold_history` | 23 | Threshold audit | `threshold_value, proposed_by, rationale` |
-| `council_rationale` | 23 | Council Glass Box | `rationale_ipfs_cid, ccin_principles TEXT[]` |
+| `council_rationale` | 23 | Council Glass Box | `rationale_ipfs_cid, ica_principles TEXT[]` |
 | `veto_records` | 23 | Emergency veto | `cited_principles TEXT[], status CHECK(filed/under_review/upheld/dismissed)` |
 | `energy_events` | 24 | Energy state log | `level CHECK(GREEN/YELLOW/RED), previous_level, action_taken` |
 | `causal_events` | 25 | IPFS event log | `ipfs_cid, audience CHECK(federation/council/node), on_chain_anchor` |

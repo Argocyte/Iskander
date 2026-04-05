@@ -210,7 +210,7 @@ async def file_veto(
 ):
     """File an emergency veto against a Council decision.
 
-    Any member can veto by providing a Glass Box rationale citing CCIN
+    Any member can veto by providing a Glass Box rationale citing ICA
     Principle violations. The veto is recorded on-chain and routed to the
     cooperative for review.
 
@@ -256,7 +256,7 @@ async def submit_rationale(
 
     # STUB: Insert into council_rationale table.
     # INSERT INTO council_rationale (decision_type, description,
-    #     rationale_ipfs_cid, submitted_by, ccin_principles)
+    #     rationale_ipfs_cid, submitted_by, ica_principles)
     # VALUES ($1, $2, $3, $4, $5)
 
     return CouncilRationaleResponse(

@@ -20,7 +20,7 @@ interface IStewardshipLedger {
     /// @notice Emitted when a member revokes their delegation (weight returns to self).
     event Revoked(address indexed delegator);
 
-    /// @notice Emitted when a member files an emergency veto citing CCIN Principles.
+    /// @notice Emitted when a member files an emergency veto citing ICA Cooperative Principles.
     event EmergencyVetoFiled(
         uint256 indexed proposalId,
         address indexed vetoer,
