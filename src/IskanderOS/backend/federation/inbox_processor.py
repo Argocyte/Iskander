@@ -115,7 +115,7 @@ class InboxProcessor:
             action=f"Follow accepted: {actor_iri} → @{local_handle}",
             rationale=(
                 "Inbound Follow request from federated coop node. "
-                "Auto-accepting per open federation policy (CCIN Principle 6)."
+                "Auto-accepting per open federation policy (ICA Principle 6)."
             ),
             ethical_impact=EthicalImpactLevel.LOW,
             payload={"actor": actor_iri, "local_handle": local_handle},

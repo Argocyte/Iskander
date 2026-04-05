@@ -7,17 +7,14 @@ from __future__ import annotations
 import streamlit as st
 from frontend.api_client import generate_constitution
 
-CCIN_PRINCIPLES = [
-    "Open Membership",
+ICA_PRINCIPLES = [
+    "Voluntary & Open Membership",
     "Democratic Member Control",
     "Member Economic Participation",
     "Autonomy & Independence",
     "Education, Training & Information",
     "Cooperation Among Cooperatives",
     "Concern for Community",
-    "Ecological Sustainability",
-    "Solidarity Economy",
-    "Digital Commons",
 ]
 
 
@@ -50,7 +47,7 @@ def render() -> None:
         mission           = st.text_area("Mission Statement *", placeholder="We exist to...")
         founding_members  = st.text_area("Founding Member DIDs (one per line) *", placeholder="did:key:z6Mk...")
         pay_ratio         = st.slider("Pay Ratio Cap (highest:lowest)", min_value=1, max_value=20, value=6)
-        ccin_selected     = st.multiselect("CCIN Principles", CCIN_PRINCIPLES, default=CCIN_PRINCIPLES[:7])
+        ica_selected      = st.multiselect("ICA Cooperative Principles", ICA_PRINCIPLES, default=ICA_PRINCIPLES)
         submitted         = st.form_submit_button("Generate Constitution & Pin to IPFS")
 
     if submitted:
@@ -68,7 +65,7 @@ def render() -> None:
                     "mission_statement":  mission,
                     "founding_members":   members,
                     "pay_ratio":          pay_ratio,
-                    "ccin_principles":    ccin_selected,
+                    "ica_principles":     ica_selected,
                 })
                 st.success(f"Constitution generated! IPFS CID: `{result['ipfs_cid']}`")
                 st.info(f"**Next step:** Deploy `CoopIdentity.sol` with `legalWrapperCID = \"{result['ipfs_cid']}\"`")

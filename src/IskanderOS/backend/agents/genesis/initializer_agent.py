@@ -139,7 +139,7 @@ def inject_regulatory_layer(state: dict[str, Any]) -> dict[str, Any]:
 
 
 def configure_solo_manifest(state: dict[str, Any]) -> dict[str, Any]:
-    """Build minimal GovernanceManifest for solo node: CCIN core + regulatory layer."""
+    """Build minimal GovernanceManifest for solo node: ICA core + regulatory layer."""
     if state.get("error"):
         return state
 
@@ -165,7 +165,7 @@ def configure_solo_manifest(state: dict[str, Any]) -> dict[str, Any]:
             state,
             "configure_solo_manifest",
             f"Solo manifest configured with {len(regulatory_rules)} regulatory rule(s) "
-            f"+ CCIN constitutional core.",
+            f"+ ICA constitutional core.",
             EthicalImpactLevel.MEDIUM,
             payload={"policy_count": len(regulatory_rules)},
         ),
@@ -247,7 +247,7 @@ def compile_genesis_manifest(state: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-REQUIRED_CCIN = {"anti_extractive", "democratic_control", "transparency", "open_membership"}
+REQUIRED_ICA = {"anti_extractive", "democratic_control", "transparency", "open_membership"}
 
 
 def validate_genesis_manifest(state: dict[str, Any]) -> dict[str, Any]:
@@ -260,11 +260,11 @@ def validate_genesis_manifest(state: dict[str, Any]) -> dict[str, Any]:
         return {**state, "error": "No genesis manifest to validate."}
 
     core = set(manifest.get("constitutional_core", []))
-    missing_ccin = REQUIRED_CCIN - core
-    if missing_ccin:
+    missing_ica = REQUIRED_ICA - core
+    if missing_ica:
         return {
             **state,
-            "error": f"CCIN constitutional core incomplete. Missing: {missing_ccin}",
+            "error": f"ICA constitutional core incomplete. Missing: {missing_ica}",
         }
 
     if manifest.get("version", 0) < 1:
@@ -277,12 +277,12 @@ def validate_genesis_manifest(state: dict[str, Any]) -> dict[str, Any]:
             state,
             "validate_genesis_manifest",
             f"Genesis manifest validated: version={manifest['version']}, "
-            f"CCIN core complete, {len(manifest.get('policies', []))} policy rule(s).",
+            f"ICA core complete, {len(manifest.get('policies', []))} policy rule(s).",
             EthicalImpactLevel.MEDIUM,
             payload={
                 "version": manifest["version"],
                 "policy_count": len(manifest.get("policies", [])),
-                "ccin_complete": True,
+                "ica_complete": True,
             },
         ),
     }

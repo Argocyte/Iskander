@@ -12,7 +12,7 @@
 Build a "Governance Orchestrator" layer where AI agents propose and humans execute. Three modules:
 
 1. **ComplianceFactory** — jurisdiction-agnostic template DSL, RegulatoryScribe agent, DigitalNotary HITL flow
-2. **PolicyEngine** — governance-as-code with immutable CCIN constitutional core
+2. **PolicyEngine** — governance-as-code with immutable ICA constitutional core
 3. **TxOrchestrator** — Safe multi-sig batch drafting, settlement reconciliation, TTL enforcement
 
 Core invariant: **agents draft, humans sign**. The Iskander node never holds transaction-signing keys.
@@ -95,7 +95,7 @@ Draft → PendingReview → Approved → Notarized
 version:             int
 content_cid:         str | None
 policies:            list[PolicyRule]
-constitutional_core: list[str]   — CCIN principle IDs (cannot be overridden)
+constitutional_core: list[str]   — ICA principle IDs (cannot be overridden)
 ```
 
 ### PolicyRule
@@ -242,7 +242,7 @@ Notarization steps:
 
 ### Constitutional Core
 
-Hardcoded CCIN checks that run after manifest checks and cannot be overridden by manifest updates:
+Hardcoded ICA checks that run after manifest checks and cannot be overridden by manifest updates:
 
 - **Anti-extractive:** No transaction can benefit a single member at the expense of the collective
 - **Democratic control:** No single agent can bypass M-of-N approval
@@ -317,7 +317,7 @@ tx_stale_check_interval_hours: int = 24
 | VULN-CF-1 | Scribe modifies boilerplate to insert malicious clauses | CRITICAL | **Diff-Lock:** SHA-256 of boilerplate must match manifest hash. Mismatch → auto-reject before human review |
 | VULN-CF-2 | Outdated manifest used for live submission | HIGH | ManifestRegistry checks latest version, emits warning. Notary refuses drafts >2 versions behind |
 | VULN-CF-3 | Compromised propose_key submits fraudulent Safe batches | HIGH | **No Auto-Sign:** Node never holds signing keys. Unsigned proposals cannot move funds. Safe owners revoke immediately |
-| VULN-CF-4 | PolicyEngine manifest tampered to disable CCIN checks | CRITICAL | **Constitutional Core:** CCIN invariants are hardcoded. Manifest can only add constraints, never remove constitutional ones |
+| VULN-CF-4 | PolicyEngine manifest tampered to disable ICA checks | CRITICAL | **Constitutional Core:** ICA invariants are hardcoded. Manifest can only add constraints, never remove constitutional ones |
 | VULN-CF-5 | Stale transactions accumulate as DoS on pending_transactions | MEDIUM | TTL enforcement: `purge_stale()` transitions to Stale. Manual cancel by steward |
 | VULN-CF-6 | Notary signs document, manifest retroactively changed | HIGH | **Provenance CID:** Notarized doc embeds `manifest_content_cid`. Immutable via CausalEvent |
 
@@ -327,7 +327,7 @@ tx_stale_check_interval_hours: int = 24
 |----|------|--------|------------|
 | SYS-1 | DataSourceResolver returns stale data during field filling | Incorrect compliance docs | Resolver reads live state (singletons). Filled values shown in HITL diff for human verification |
 | SYS-2 | PolicyEngine.check_compliance() becomes a bottleneck (called by every agent) | Latency spike | PolicyEngine is in-memory, manifest loaded at startup. No I/O per check. Reload only on manifest file change |
-| SYS-3 | Constitutional Core checks are too rigid for evolving CCIN principles | Cooperative cannot adapt governance | Constitutional Core is a code-level minimum floor, not a ceiling. Manifest adds rules on top. Principle evolution requires a code release (deliberate, auditable friction) |
+| SYS-3 | Constitutional Core checks are too rigid for evolving ICA principles | Cooperative cannot adapt governance | Constitutional Core is a code-level minimum floor, not a ceiling. Manifest adds rules on top. Principle evolution requires a code release (deliberate, auditable friction) |
 | SYS-4 | TxOrchestrator verify_settlement fails to detect reorgs | Double-counted settlement | Production: wait for N confirmations (configurable). Stub: immediate. CausalEvent is append-only, so reorg detection adds a new event, doesn't delete the old one |
 | SYS-5 | Multiple concurrent Scribe invocations for same manifest produce conflicting drafts | Confusion over which draft is canonical | Each draft gets unique UUID. Only one can be Approved at a time per manifest_id (enforced by DigitalNotary) |
 | SYS-6 | DigitalNotary signing key leaked | Forged notarizations | Key loaded from env var (never in code). STUB uses HMAC; production uses Ed25519 with hardware key. CausalEvent provides tamper-evident audit trail. Compromised key → tombstone all notarizations from that key (same pattern as Credential Embassy) |
@@ -357,7 +357,7 @@ tx_stale_check_interval_hours: int = 24
 | 8 | `backend/compliance/digital_notary.py` | CREATE | DigitalNotary singleton — HITL approval, signing, Mesh pinning |
 | 9 | `backend/governance/__init__.py` | CREATE | Package init |
 | 10 | `backend/governance/policy_engine.py` | CREATE | PolicyEngine singleton — manifest reading, compliance checks, constitutional core |
-| 11 | `backend/governance/governance_manifest.json` | CREATE | Default governance manifest with CCIN constitutional core |
+| 11 | `backend/governance/governance_manifest.json` | CREATE | Default governance manifest with ICA constitutional core |
 | 12 | `backend/finance/tx_orchestrator.py` | CREATE | TxOrchestrator singleton — Safe batch drafting, settlement, TTL |
 | 13 | `backend/compliance/manifests/example-uk-payment.json` | CREATE | Example manifest for testing |
 | 14 | `backend/routers/compliance.py` | CREATE | FastAPI router — 14 endpoints |

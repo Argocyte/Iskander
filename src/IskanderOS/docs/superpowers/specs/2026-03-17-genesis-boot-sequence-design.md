@@ -11,7 +11,7 @@
 
 Build the Genesis Boot Sequence — the one-way initialization that onboards a cooperative's (or individual's) governance into the Orchestrator engine. Three modes:
 
-1. **SOLO_NODE** — Single-user sovereign node. Only CCIN constitutional core + jurisdictional regulatory layer. No cooperative ceremony.
+1. **SOLO_NODE** — Single-user sovereign node. Only ICA constitutional core + jurisdictional regulatory layer. No cooperative ceremony.
 2. **LEGACY_IMPORT** — Cooperative importing existing bylaws via template-guided LLM extraction with HITL mapping confirmation.
 3. **NEW_FOUNDING** — Cooperative selecting a governance template from the LibraryManager.
 
@@ -27,7 +27,7 @@ Based on established cooperative practice (ICA, Mondragon, UK BenCom, DisCO):
 
 | Tier | Changeability | Threshold | Examples |
 |------|--------------|-----------|----------|
-| **Constitutional Core (CCIN)** | Code-level, immutable | Code release only | Anti-extractive, democratic control, transparency, open membership |
+| **Constitutional Core (ICA)** | Code-level, immutable | Code release only | Anti-extractive, democratic control, transparency, open membership |
 | **Genesis + Amendments** | On-chain CIDs via Constitution.sol | 2/3 supermajority via MACIVoting | Membership rules, pay ratio, dissolution terms |
 | **Operational Policy** | governance_manifest.json | Steward consensus via PolicyEngine | Spending limits, vendor policies, reporting thresholds |
 
@@ -35,7 +35,7 @@ Additionally, a **Regulatory Layer** acts as a permanent jurisdictional floor th
 
 ### Solo Node Simplification
 
-Solo nodes operate with only two tiers: CCIN constitutional core + regulatory layer. No constitutional amendments (the owner updates their manifest directly). No M-of-N governance. The owner is the sole HITL authority.
+Solo nodes operate with only two tiers: ICA constitutional core + regulatory layer. No constitutional amendments (the owner updates their manifest directly). No M-of-N governance. The owner is the sole HITL authority.
 
 ---
 
@@ -200,12 +200,12 @@ Additionally, genesis is a one-time critical operation and should NOT be interru
 | `select_template` | Human picks a template (e.g. "DisCO Housing Standard"). Populate extracted_rules from template defaults |
 | `populate_profile` | Build CoopProfile from template defaults + human overrides |
 | `inject_regulatory_layer` | Load jurisdiction-specific RegulatoryLayer from `backend/governance/regulatory/{jurisdiction}.json`. These rules are the permanent floor — cannot be weakened |
-| `configure_solo_manifest` | Solo mode: build minimal GovernanceManifest with CCIN core + regulatory layer + any personal operational rules |
+| `configure_solo_manifest` | Solo mode: build minimal GovernanceManifest with ICA core + regulatory layer + any personal operational rules |
 | `confirm_mappings` | **HITL breakpoint (cooperative only).** Present each ExtractedRule as a mapping confirmation. Every founder approves/rejects each rule and assigns tier (Constitutional/Operational/Regulatory). Requires unanimous consent — every value in `mapping_confirmations[founder_did][rule_id]` must be True for all founders and all rules. (Note: `founder_confirmations` is reserved for the final `ratify_genesis` sign-off, not per-rule approval) |
 | `owner_review` | **HITL breakpoint (solo only).** Owner reviews the compiled manifest. Single sign-off |
 | `propose_novel_fields` | Rules with `is_novel_field=True` are packaged as KnowledgeAsset proposals to LibraryManager. The skeleton grows for future cooperatives via IKC curator consensus |
 | `compile_genesis_manifest` | Merge confirmed rules by tier: regulatory layer (permanent floor) + constitutional rules + operational rules → GovernanceManifest + RegulatoryLayer |
-| `validate_genesis_manifest` | Check all required PolicyEngine fields present. Verify CCIN constitutional core included. Verify regulatory layer covers jurisdiction minimums. Verify no regulatory rules were weakened |
+| `validate_genesis_manifest` | Check all required PolicyEngine fields present. Verify ICA constitutional core included. Verify regulatory layer covers jurisdiction minimums. Verify no regulatory rules were weakened |
 | `ratify_genesis` | **HITL breakpoint (cooperative only).** Final sign-off by ALL founding members (N-of-N). Displays the full manifest diff. This is the point of no return. Solo nodes skip this (owner already approved in `owner_review`) |
 | `execute_genesis_binding` | The one-way trip (see Section 5) |
 | `execute_solo_genesis` | Lightweight version of genesis binding for solo nodes (see Section 5) |
@@ -368,7 +368,7 @@ A member who already runs a personal Iskander node (SOLO_NODE) can use that node
 
 ### Architecture
 
-- **Personal node** is a SOLO_NODE with its own genesis (CCIN + regulatory layer + personal operational rules)
+- **Personal node** is a SOLO_NODE with its own genesis (ICA + regulatory layer + personal operational rules)
 - **Cooperative membership** is a remote relationship — the personal node holds the member's SBT proof and Safe signer key, but the cooperative's governance lives on the cooperative's node(s)
 - **Membership registry**: `membership_contexts: dict[str, MembershipContext]` — keyed by cooperative DID, stores: cooperative name, Safe address, SBT token ID, cooperative node endpoint, governance manifest CID (cached), role (worker-owner / steward), last sync timestamp
 - **Context switching**: the personal node presents cooperative-specific governance context when the member acts on behalf of a specific cooperative (proposals, votes, HITL approvals)
@@ -443,7 +443,7 @@ The full MembershipContext schema, credential delegation flow, and node-offline 
 | 7 | `backend/governance/regulatory/__init__.py` | CREATE | Package init |
 | 8 | `backend/governance/regulatory/GB.json` | CREATE | UK BenCom regulatory layer template |
 | 9 | `backend/governance/regulatory/ES.json` | CREATE | Spain/Basque cooperative regulatory layer template |
-| 10 | `backend/governance/regulatory/UNIVERSAL.json` | CREATE | Universal CCIN-only regulatory layer (fallback) |
+| 10 | `backend/governance/regulatory/UNIVERSAL.json` | CREATE | Universal ICA-only regulatory layer (fallback) |
 | 11 | `contracts/src/CoopIdentity.sol` | MODIFY | Add `setConstitution(address)` one-time setter and `ConstitutionSet` event |
 | 12 | `contracts/src/Constitution.sol` | CREATE | Minimal on-chain genesis anchor |
 | 13 | `contracts/test/Constitution.t.sol` | CREATE | Foundry tests for Constitution.sol |

@@ -101,7 +101,7 @@ autoinstall:
     #    open-data, open-training-code model from the Allen Institute for AI.
     #    OLMo's training corpus (Dolma) is publicly auditable, eliminating
     #    the extractive opacity of corporate-controlled foundation models.
-    #    This aligns with CCIN Principle 4 (Autonomy & Independence) — the
+    #    This aligns with ICA Principle 4 (Autonomy & Independence) — the
     #    cooperative's AI must not depend on models whose training data provenance
     #    is unknowable and whose biases are unauditable.
     - curtin in-target --target=/target -- bash -c "curl -fsSL https://ollama.com/install.sh | sh"

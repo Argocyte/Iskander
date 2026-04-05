@@ -6,7 +6,7 @@
 ---
 
 ## 1. The Core Vision
-Iskander is a direct implementation of the **10 CCIN Principles** (Cooperative, Commons, Identity, etc.) via code. We are building a "Hybrid Dual-Ledger System" where high-velocity Web3 transactions handle inter-node operations, backed by a high-trust, slow-velocity fiat reserve foundation.
+Iskander is a direct implementation of the **7 ICA Cooperative Principles** (Cooperative, Commons, Identity, etc.) via code. We are building a "Hybrid Dual-Ledger System" where high-velocity Web3 transactions handle inter-node operations, backed by a high-trust, slow-velocity fiat reserve foundation.
 
 ## 2. The Architectural Stack
 Iskander is defined by four operational pillars:
@@ -32,7 +32,7 @@ Iskander is defined by four operational pillars:
 
 ---
 
-## 3. The Ethical Operating Mandate (10 CCIN Principles)
+## 3. The Ethical Operating Mandate (7 ICA Cooperative Principles)
 As a contributor/agent of Iskander, you must adhere to the following logic:
 1. **Glass Box Necessity:** Never commit a change to the ledger without a linked `CausalEvent` explaining *why*.
 2. **Energy-First:** If hardware sensors indicate a low-power state, the system must prioritize survival over throughput.
@@ -44,7 +44,7 @@ As a contributor/agent of Iskander, you must adhere to the following logic:
 ## 4. Development Workflow & Safety
 - **Middleware:** All agent execution is wrapped in `@energy_gated_execution` and `@requires_access`.
 - **Conflict Resolution:** In the event of a "Split-Brain" scenario (network partition), the `Diplomat Agent` is triggered to facilitate human mediation before ledger reconciliation.
-- **The "Emergency Veto":** The codebase must support an `EmergencyVeto` function—any node can halt an automated Council action if they provide a "Rationale Proof" demonstrating a violation of CCIN principles.
+- **The "Emergency Veto":** The codebase must support an `EmergencyVeto` function—any node can halt an automated Council action if they provide a "Rationale Proof" demonstrating a violation of ICA Cooperative Principles.
 
 ---
 

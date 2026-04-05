@@ -670,7 +670,7 @@ def emit_report(state: ICAVettingState) -> dict[str, Any]:
             "It is a TRANSPARENCY TOOL, not a decision-maker. All scores are "
             "based on available evidence and may contain gaps. The cooperative's "
             "democratic body — not the AI — makes the final trading partner decision. "
-            "CCIN Principle 2: Democratic Member Control. One member, one vote."
+            "ICA Principle 2: Democratic Member Control. One member, one vote."
         ),
     }
 

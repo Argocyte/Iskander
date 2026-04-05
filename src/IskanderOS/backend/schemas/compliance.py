@@ -176,7 +176,7 @@ class GovernanceManifest(BaseModel):
     policies: list[PolicyRule] = Field(default_factory=list)
     constitutional_core: list[str] = Field(
         default_factory=list,
-        description="CCIN principle IDs (cannot be overridden by manifest updates)",
+        description="ICA principle IDs (cannot be overridden by manifest updates)",
     )
 
 

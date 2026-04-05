@@ -31,7 +31,7 @@ Implement the "Stewardship Council" (SC) logic. The SC is a dynamic, federated l
   - Proposes/Updates the "Steward Threshold" periodically.
 
 ### C. HITL & Constitutional Safeguards
-- **Veto-Right:** Implement an `EmergencyVeto` function. Any Node can initiate a veto if they provide a "Rationale Proof" (Glass Box Protocol) citing a violation of the 10 CCIN Principles.
+- **Veto-Right:** Implement an `EmergencyVeto` function. Any Node can initiate a veto if they provide a "Rationale Proof" (Glass Box Protocol) citing a violation of the 7 ICA Cooperative Principles.
 - **Circuit Breaker:** If `Total_Escrow_Value` (on-chain) > `Fiat_Reserve_Value` * `Solvency_Factor`, the system must prevent Council decisions that would increase financial exposure.
 
 ## 4. IMMEDIATE TASKS FOR AGENT
