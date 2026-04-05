@@ -469,3 +469,43 @@ class TestGenesisGraph:
         state["boot_complete"] = True
         result = select_mode(state)
         assert result.get("error") is not None or result.get("boot_complete") is True
+
+
+# ── Task 17: Solo Boot End-to-End Integration Test ─────────────────────────
+
+
+class TestSoloBootEndToEnd:
+    def test_solo_boot_end_to_end(self):
+        graph = build_genesis_graph()
+        state = _solo_initial_state()
+        state["owner_profile"] = {
+            "did": "did:key:solo_owner",
+            "address": "0x" + "b" * 40,
+            "name": "Solo Owner",
+            "jurisdiction": "GB",
+        }
+        config = {"configurable": {"thread_id": "test-solo-e2e"}}
+        graph.invoke(state, config=config)
+        snapshot = graph.get_state(config)
+        result = snapshot.values
+        assert result["node_type"] == "solo"
+        assert result["regulatory_layer"]["jurisdiction"] == "GB"
+        assert result["genesis_manifest"] is not None
+        assert result["genesis_manifest"]["version"] == 1
+        assert "anti_extractive" in result["genesis_manifest"]["constitutional_core"]
+        assert result["boot_phase"] in ("owner-review", "manifest-validated", "solo-manifest-configured")
+        assert len(result["action_log"]) >= 3
+
+    def test_solo_mode_loads_regulatory_layer(self):
+        graph = build_genesis_graph()
+        state = _solo_initial_state()
+        state["owner_profile"] = {
+            "did": "did:key:es_owner",
+            "address": "0x" + "c" * 40,
+            "name": "ES Owner",
+            "jurisdiction": "ES",
+        }
+        config = {"configurable": {"thread_id": "test-solo-es"}}
+        graph.invoke(state, config=config)
+        result = graph.get_state(config).values
+        assert result["regulatory_layer"]["jurisdiction"] == "ES"
