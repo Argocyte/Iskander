@@ -4,12 +4,21 @@ Run: uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 """
 
 import structlog
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import settings
+from backend.db import close_pool
 
 logger = structlog.get_logger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    await close_pool()
+
 
 app = FastAPI(
     title="Project Iskander — Sovereign Node API",
@@ -20,6 +29,7 @@ app = FastAPI(
     version="0.1.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
