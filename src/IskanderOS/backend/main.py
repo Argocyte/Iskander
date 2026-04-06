@@ -4,12 +4,33 @@ Run: uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 """
 
 import structlog
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import settings
+from backend.db import close_pool, init_pool
 
 logger = structlog.get_logger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("iskander_node_starting", domain=settings.activitypub_domain)
+    from backend.core.llm_queue_manager import AsyncAgentQueue
+    try:
+        await init_pool()
+        logger.info("asyncpg_pool_initialised")
+    except Exception as exc:
+        logger.error("asyncpg_pool_unavailable", error=str(exc))
+        raise
+    AsyncAgentQueue.get_instance().start()
+    logger.info("iskander_agent_queue_started")
+    yield
+    AsyncAgentQueue.get_instance().stop()
+    await close_pool()
+    logger.info("iskander_node_stopping")
+
 
 app = FastAPI(
     title="Project Iskander — Sovereign Node API",
@@ -20,6 +41,7 @@ app = FastAPI(
     version="0.1.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -72,6 +94,9 @@ from backend.routers.knowledge             import router as knowledge_router
 from backend.routers.diplomacy             import router as diplomacy_router
 # Genesis Boot Sequence — one-way cooperative initialization
 from backend.routers.genesis               import router as genesis_router
+# Deliberation Data Layer — working group management
+from backend.routers.subgroups             import router as subgroups_router
+from backend.routers.deliberation          import router as deliberation_router
 
 app.include_router(constitution_router)
 app.include_router(federation_router)
@@ -114,6 +139,9 @@ app.include_router(knowledge_router)            # /knowledge/register, /knowledg
 app.include_router(diplomacy_router)            # /diplomacy/sdc, /diplomacy/ingest, /diplomacy/research
 # Genesis Boot Sequence — one-way cooperative initialization
 app.include_router(genesis_router)          # /genesis/status, /genesis/boot, /genesis/founders, etc.
+# Deliberation Data Layer — working group management
+app.include_router(subgroups_router)        # /subgroups — working group management
+app.include_router(deliberation_router)      # /deliberation — threads, proposals, votes
 
 
 @app.get("/health", tags=["system"])
@@ -130,17 +158,3 @@ async def health() -> dict:
         "ws_connections": WebSocketNotifier.get_instance().active_connections(),
     }
 
-
-@app.on_event("startup")
-async def on_startup() -> None:
-    logger.info("iskander_node_starting", domain=settings.activitypub_domain)
-    from backend.core.llm_queue_manager import AsyncAgentQueue
-    AsyncAgentQueue.get_instance().start()
-    logger.info("iskander_agent_queue_started")
-
-
-@app.on_event("shutdown")
-async def on_shutdown() -> None:
-    from backend.core.llm_queue_manager import AsyncAgentQueue
-    AsyncAgentQueue.get_instance().stop()
-    logger.info("iskander_node_stopping")
