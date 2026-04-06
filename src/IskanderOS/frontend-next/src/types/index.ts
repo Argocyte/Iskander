@@ -239,5 +239,6 @@ export type DeliberationEvent =
   | 'stance_cast'
   | 'proposal_closed'
   | 'outcome_stated'
+  | 'task_created'
   | 'task_assigned'
   | 'member_nudge'
