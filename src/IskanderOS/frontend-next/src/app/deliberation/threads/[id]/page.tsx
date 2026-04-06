@@ -8,7 +8,9 @@ import { deliberation } from '@/lib/api';
 import { ThreadDetail } from '@/types';
 import { StatusBadge } from '@/components/deliberation/StatusBadge';
 import { CommentThread } from '@/components/deliberation/CommentThread';
+import { CommentComposer } from '@/components/deliberation/CommentComposer';
 import { ProposalCard } from '@/components/deliberation/ProposalCard';
+import { CreateProposalForm } from '@/components/deliberation/CreateProposalForm';
 import { TaskList } from '@/components/deliberation/TaskList';
 
 function formatDate(iso: string): string {
@@ -150,8 +152,34 @@ export default function ThreadDetailPage() {
             >
               Create Proposal
             </button>
-            {/* CreateProposalForm placeholder — wired in C.5 */}
-            {showCreateProposal && null}
+            {/* CreateProposalForm */}
+            {showCreateProposal && (
+              <CreateProposalForm
+                threadId={thread.id}
+                onProposalCreated={(p) => {
+                  setThread((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          proposals: [
+                            ...prev.proposals,
+                            {
+                              id: p.id,
+                              title: p.title,
+                              process_type: p.process_type,
+                              status: p.status,
+                              closing_at: p.closing_at,
+                              stance_count: 0,
+                            },
+                          ],
+                        }
+                      : null
+                  );
+                  setShowCreateProposal(false);
+                }}
+                onClose={() => setShowCreateProposal(false)}
+              />
+            )}
           </div>
         )}
       </div>
@@ -160,7 +188,14 @@ export default function ThreadDetailPage() {
       <div>
         <h2 className="text-lg font-semibold text-iskander-300 mb-4">Discussion</h2>
         <CommentThread comments={thread.comments} threadId={thread.id} />
-        {/* CommentComposer placeholder — wired in C.5 */}
+        <CommentComposer
+          threadId={thread.id}
+          onCommentAdded={(c) =>
+            setThread((prev) =>
+              prev ? { ...prev, comments: [...prev.comments, c] } : null
+            )
+          }
+        />
       </div>
 
       {/* 7. Tasks section (conditional) */}

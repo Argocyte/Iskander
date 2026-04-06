@@ -6,6 +6,7 @@ import { deliberation, subgroups } from '@/lib/api';
 import { ThreadSummary, SubGroup } from '@/types';
 import { ThreadCard } from '@/components/deliberation/ThreadCard';
 import { ThreadFilters } from '@/components/deliberation/ThreadFilters';
+import { CreateThreadForm } from '@/components/deliberation/CreateThreadForm';
 
 export default function DeliberationPage() {
   const { isAuthenticated } = useAuth();
@@ -64,8 +65,30 @@ export default function DeliberationPage() {
         )}
       </div>
 
-      {/* CreateThreadForm placeholder — wired in C.5 */}
-      {showCreateForm && null}
+      {/* CreateThreadForm */}
+      {showCreateForm && (
+        <CreateThreadForm
+          subGroups={subGroupsList}
+          onThreadCreated={(t) => {
+            setThreads((prev) => [
+              {
+                id: t.id,
+                title: t.title,
+                author_did: t.author_did,
+                status: t.status,
+                tags: t.tags,
+                sub_group_id: t.sub_group_id,
+                open_proposal_count: 0,
+                comment_count: 0,
+                last_activity: t.created_at,
+              } as ThreadSummary,
+              ...prev,
+            ]);
+            setShowCreateForm(false);
+          }}
+          onClose={() => setShowCreateForm(false)}
+        />
+      )}
 
       {/* Filters */}
       <ThreadFilters
