@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { useWebSocket } from '@/hooks/useWebSocket';
 import { deliberation, subgroups } from '@/lib/api';
 import { ThreadSummary, SubGroup } from '@/types';
 import { ThreadCard } from '@/components/deliberation/ThreadCard';
@@ -10,6 +11,7 @@ import { CreateThreadForm } from '@/components/deliberation/CreateThreadForm';
 
 export default function DeliberationPage() {
   const { isAuthenticated } = useAuth();
+  const { lastEvent } = useWebSocket();
 
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [subGroupsList, setSubGroupsList] = useState<SubGroup[]>([]);
@@ -37,6 +39,15 @@ export default function DeliberationPage() {
       })
       .finally(() => setLoading(false));
   }, [filters]);
+
+  // Refetch threads when a new thread is created via WebSocket
+  useEffect(() => {
+    if (lastEvent?.event === 'thread_created') {
+      deliberation.listThreads(filters)
+        .then(setThreads)
+        .catch(() => {})  // silent — main fetch handles errors
+    }
+  }, [lastEvent])
 
   // Fetch subgroups once on mount
   useEffect(() => {

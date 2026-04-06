@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
+import { useWebSocket } from '@/hooks/useWebSocket';
 import { deliberation } from '@/lib/api';
 import { ProposalDetail, StanceResponse } from '@/types';
 import { ProcessTypeBadge } from '@/components/deliberation/ProcessTypeBadge';
@@ -62,6 +63,7 @@ function useCountdown(closingAt: string | null, status: string) {
 export default function ProposalDetailPage() {
   const { id, proposalId } = useParams<{ id: string; proposalId: string }>();
   const { user } = useAuth();
+  const { lastEvent } = useWebSocket();
 
   const [proposal, setProposal] = useState<ProposalDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -85,6 +87,15 @@ export default function ProposalDetailPage() {
   useEffect(() => {
     fetchProposal();
   }, [fetchProposal]);
+
+  // Refetch proposal on relevant WebSocket events for this proposal
+  useEffect(() => {
+    if (!lastEvent) return
+    const matchingEvents = ['stance_cast', 'proposal_closed', 'outcome_stated']
+    if (matchingEvents.includes(lastEvent.event) && lastEvent.payload?.proposal_id === proposalId) {
+      fetchProposal()
+    }
+  }, [lastEvent, proposalId, fetchProposal])
 
   // ── Loading ──────────────────────────────────────────────────────────────────
   if (loading) {
