@@ -8,6 +8,7 @@ import { ThreadSummary, SubGroup } from '@/types';
 import { ThreadCard } from '@/components/deliberation/ThreadCard';
 import { ThreadFilters } from '@/components/deliberation/ThreadFilters';
 import { CreateThreadForm } from '@/components/deliberation/CreateThreadForm';
+import { WorkingGroupPanel } from '@/components/deliberation/WorkingGroupPanel';
 
 export default function DeliberationPage() {
   const { isAuthenticated } = useAuth();
@@ -49,8 +50,8 @@ export default function DeliberationPage() {
     }
   }, [lastEvent])
 
-  // Fetch subgroups once on mount
-  useEffect(() => {
+  // Fetch subgroups — extracted so WorkingGroupPanel can trigger a refetch
+  const refetchSubGroups = () => {
     subgroups
       .list()
       .then((data) => setSubGroupsList(data))
@@ -58,6 +59,12 @@ export default function DeliberationPage() {
         // Non-critical — filters still render without subgroups
       })
       .finally(() => setSubGroupsLoading(false));
+  };
+
+  // Fetch subgroups once on mount
+  useEffect(() => {
+    refetchSubGroups();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -108,6 +115,13 @@ export default function DeliberationPage() {
         subGroups={subGroupsList}
         subGroupsLoading={subGroupsLoading}
       />
+
+      {/* Working Group Management */}
+      {isAuthenticated && (
+        <div className="bg-iskander-900 rounded-xl p-4 border border-iskander-800">
+          <WorkingGroupPanel subGroups={subGroupsList} onSubGroupsChange={refetchSubGroups} />
+        </div>
+      )}
 
       {/* Thread list */}
       {loading && (
