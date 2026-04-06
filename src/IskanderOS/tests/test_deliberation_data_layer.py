@@ -87,3 +87,69 @@ class TestHITLExtensions:
             route="loomio",
         )
         assert n.route == "loomio"
+
+
+from unittest.mock import AsyncMock
+
+class TestSubGroupsRouter:
+    async def test_list_subgroups_returns_empty_list(self, async_client, mock_db):
+        from backend.db import get_db
+        from backend.main import app
+        from backend.auth.dependencies import get_current_user, AuthenticatedUser
+        fake_user = AuthenticatedUser(address="0xTest", did="did:example:test", role="steward", member_token_id=1, chain_id=31337)
+        app.dependency_overrides[get_current_user] = lambda: fake_user
+        app.dependency_overrides[get_db] = lambda: mock_db
+        mock_db.fetch = AsyncMock(return_value=[])
+
+        resp = await async_client.get(
+            "/subgroups",
+            headers={"Authorization": "Bearer test-token"},
+        )
+        assert resp.status_code == 200
+        assert resp.json() == []
+        app.dependency_overrides.clear()
+
+    async def test_create_subgroup_returns_201(self, async_client, mock_db):
+        from backend.db import get_db
+        from backend.main import app
+        from backend.auth.dependencies import get_current_user, AuthenticatedUser
+        import uuid
+        from datetime import datetime, timezone
+
+        fake_user = AuthenticatedUser(address="0xTest", did="did:example:test", role="steward", member_token_id=1, chain_id=31337)
+        app.dependency_overrides[get_current_user] = lambda: fake_user
+
+        fake_row = {
+            "id": str(uuid.uuid4()),
+            "slug": "tech-wg",
+            "name": "Tech Working Group",
+            "description": None,
+            "created_by": "did:example:alice",
+            "created_at": datetime.now(timezone.utc),
+        }
+        mock_db.fetchrow = AsyncMock(return_value=fake_row)
+        app.dependency_overrides[get_db] = lambda: mock_db
+
+        resp = await async_client.post(
+            "/subgroups",
+            json={"slug": "tech-wg", "name": "Tech Working Group", "created_by": "did:example:alice"},
+            headers={"Authorization": "Bearer test-token"},
+        )
+        assert resp.status_code == 201
+        assert resp.json()["slug"] == "tech-wg"
+        app.dependency_overrides.clear()
+
+    async def test_create_subgroup_invalid_slug_returns_422(self, async_client, mock_db):
+        from backend.db import get_db
+        from backend.main import app
+        from backend.auth.dependencies import get_current_user, AuthenticatedUser
+        fake_user = AuthenticatedUser(address="0xTest", did="did:example:test", role="steward", member_token_id=1, chain_id=31337)
+        app.dependency_overrides[get_current_user] = lambda: fake_user
+        app.dependency_overrides[get_db] = lambda: mock_db
+        resp = await async_client.post(
+            "/subgroups",
+            json={"slug": "INVALID SLUG!", "name": "Bad", "created_by": "did:example:alice"},
+            headers={"Authorization": "Bearer test-token"},
+        )
+        assert resp.status_code == 422
+        app.dependency_overrides.clear()
