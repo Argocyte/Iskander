@@ -1194,4 +1194,152 @@ CREATE TABLE IF NOT EXISTS regulatory_updates (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     resolved_at     TIMESTAMPTZ
 );
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Phase A: Native Deliberation System (Loomio-equivalent)
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- Sub-groups (working groups within the cooperative)
+CREATE TABLE IF NOT EXISTS sub_groups (
+    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    slug        TEXT UNIQUE NOT NULL,       -- e.g. "finance-committee"
+    name        TEXT NOT NULL,
+    description TEXT,
+    created_by  TEXT NOT NULL,              -- member DID
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS sub_group_members (
+    sub_group_id UUID NOT NULL REFERENCES sub_groups(id) ON DELETE CASCADE,
+    member_did   TEXT NOT NULL,
+    role         TEXT NOT NULL DEFAULT 'member'
+                 CHECK (role IN ('member', 'coordinator')),
+    joined_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (sub_group_id, member_did)
+);
+
+-- Deliberation threads (Loomio Discussions)
+CREATE TABLE IF NOT EXISTS deliberation_threads (
+    id               UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    title            TEXT NOT NULL,
+    context          TEXT NOT NULL DEFAULT '',  -- rich-text body framing the topic
+    author_did       TEXT NOT NULL,
+    sub_group_id     UUID REFERENCES sub_groups(id) ON DELETE SET NULL,
+    tags             TEXT[] NOT NULL DEFAULT '{}',
+    status           TEXT NOT NULL DEFAULT 'open'
+                     CHECK (status IN ('open', 'closed', 'pinned')),
+    ai_context_draft TEXT,                      -- DiscussionAgent draft before human edit
+    agent_action_id  UUID REFERENCES agent_actions(id),
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_threads_author    ON deliberation_threads(author_did);
+CREATE INDEX IF NOT EXISTS idx_threads_status    ON deliberation_threads(status);
+CREATE INDEX IF NOT EXISTS idx_threads_subgroup  ON deliberation_threads(sub_group_id);
+CREATE INDEX IF NOT EXISTS idx_threads_tags      ON deliberation_threads USING GIN(tags);
+
+-- Comments within threads
+CREATE TABLE IF NOT EXISTS thread_comments (
+    id        UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    thread_id UUID NOT NULL REFERENCES deliberation_threads(id) ON DELETE CASCADE,
+    author_did TEXT NOT NULL,
+    parent_id  UUID REFERENCES thread_comments(id) ON DELETE CASCADE,  -- NULL = top-level
+    body       TEXT NOT NULL,
+    edited_at  TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_comments_thread ON thread_comments(thread_id, created_at);
+
+-- Emoji reactions on comments
+CREATE TABLE IF NOT EXISTS thread_reactions (
+    comment_id  UUID NOT NULL REFERENCES thread_comments(id) ON DELETE CASCADE,
+    member_did  TEXT NOT NULL,
+    emoji       TEXT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (comment_id, member_did, emoji)
+);
+
+-- Track who has read each thread
+CREATE TABLE IF NOT EXISTS thread_seen (
+    thread_id    UUID NOT NULL REFERENCES deliberation_threads(id) ON DELETE CASCADE,
+    member_did   TEXT NOT NULL,
+    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (thread_id, member_did)
+);
+
+-- Proposals attached to threads
+CREATE TABLE IF NOT EXISTS deliberation_proposals (
+    id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    thread_id    UUID NOT NULL REFERENCES deliberation_threads(id) ON DELETE CASCADE,
+    title        TEXT NOT NULL,
+    body         TEXT NOT NULL,
+    process_type TEXT NOT NULL
+                 CHECK (process_type IN (
+                     'sense_check', 'advice', 'consent', 'consensus',
+                     'choose', 'score', 'allocate', 'rank', 'time_poll'
+                 )),
+    options      JSONB,               -- for choose/score/allocate/rank/time_poll
+    quorum_pct   INTEGER NOT NULL DEFAULT 0 CHECK (quorum_pct BETWEEN 0 AND 100),
+    closing_at   TIMESTAMPTZ,
+    status       TEXT NOT NULL DEFAULT 'open'
+                 CHECK (status IN ('open', 'closed', 'withdrawn')),
+    ai_draft     TEXT,                -- ProposalAgent draft before human edit
+    author_did   TEXT NOT NULL,
+    agent_action_id UUID REFERENCES agent_actions(id),
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    closed_at    TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_proposals_thread ON deliberation_proposals(thread_id);
+CREATE INDEX IF NOT EXISTS idx_proposals_status ON deliberation_proposals(status, closing_at);
+
+-- Stances (member votes with reasons)
+CREATE TABLE IF NOT EXISTS proposal_stances (
+    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    proposal_id UUID NOT NULL REFERENCES deliberation_proposals(id) ON DELETE CASCADE,
+    member_did  TEXT NOT NULL,
+    stance      TEXT NOT NULL,        -- 'agree'|'abstain'|'disagree'|'block' or option key
+    score       INTEGER,              -- for score/allocate polls
+    rank_order  JSONB,                -- for rank polls [{option_id, position}]
+    reason      TEXT,                 -- member's stated reason (encouraged, not required)
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (proposal_id, member_did)  -- one stance per member per proposal
+);
+
+CREATE INDEX IF NOT EXISTS idx_stances_proposal ON proposal_stances(proposal_id);
+
+-- Outcome statements (recorded after proposals close)
+CREATE TABLE IF NOT EXISTS decision_outcomes (
+    id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    proposal_id   UUID NOT NULL UNIQUE REFERENCES deliberation_proposals(id) ON DELETE CASCADE,
+    statement     TEXT NOT NULL,
+    decision_type TEXT NOT NULL
+                  CHECK (decision_type IN ('passed', 'rejected', 'withdrawn', 'no_quorum')),
+    precedent_id  UUID REFERENCES democratic_precedents(id),  -- pgvector memory link
+    ai_draft      TEXT,               -- OutcomeAgent draft before human confirms
+    stated_by     TEXT NOT NULL,      -- DID of member who confirmed the outcome
+    agent_action_id UUID REFERENCES agent_actions(id),
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Tasks assigned from threads or outcomes
+CREATE TABLE IF NOT EXISTS thread_tasks (
+    id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    thread_id    UUID NOT NULL REFERENCES deliberation_threads(id) ON DELETE CASCADE,
+    outcome_id   UUID REFERENCES decision_outcomes(id) ON DELETE SET NULL,
+    title        TEXT NOT NULL,
+    assignee_did TEXT,                -- NULL = unassigned
+    due_date     DATE,
+    done         BOOLEAN NOT NULL DEFAULT FALSE,
+    done_at      TIMESTAMPTZ,
+    created_by   TEXT NOT NULL,
+    agent_action_id UUID REFERENCES agent_actions(id),
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_tasks_thread   ON thread_tasks(thread_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_assignee ON thread_tasks(assignee_did) WHERE done = FALSE;
 CREATE INDEX IF NOT EXISTS idx_regulatory_updates_status ON regulatory_updates(status);

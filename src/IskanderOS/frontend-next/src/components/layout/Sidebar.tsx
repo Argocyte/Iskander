@@ -13,6 +13,7 @@ const navItems = [
   { href: "/", label: "Home", icon: "🏠" },
   { href: "/identity", label: "Identity", icon: "🪪" },
   { href: "/governance", label: "Governance", icon: "🏛️" },
+  { href: "/deliberation", label: "Deliberation", icon: "💬" },
   { href: "/treasury", label: "Treasury", icon: "💰" },
   { href: "/ledger", label: "DisCO Ledger", icon: "📒" },
   { href: "/escrow", label: "Escrow", icon: "🤝" },
