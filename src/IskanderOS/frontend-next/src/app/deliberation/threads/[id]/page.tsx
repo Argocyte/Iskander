@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
+import { useWebSocket } from '@/hooks/useWebSocket';
 import { deliberation } from '@/lib/api';
 import { ThreadDetail } from '@/types';
 import { StatusBadge } from '@/components/deliberation/StatusBadge';
@@ -24,6 +25,7 @@ function formatDate(iso: string): string {
 export default function ThreadDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user, isAuthenticated } = useAuth();
+  const { lastEvent } = useWebSocket();
 
   const [thread, setThread] = useState<ThreadDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -48,6 +50,45 @@ export default function ThreadDetailPage() {
       })
       .finally(() => setLoading(false));
   }, [id, isAuthenticated, user?.did]);
+
+  // Refetch thread on relevant WebSocket events for this thread
+  useEffect(() => {
+    if (!lastEvent) return
+    const matchingEvents = ['comment_added', 'proposal_opened', 'task_created']
+    if (matchingEvents.includes(lastEvent.event) && lastEvent.payload?.thread_id === id) {
+      deliberation.getThread(id).then(setThread).catch(() => {})
+    }
+  }, [lastEvent, id])
+
+  // Emoji reaction handler
+  const handleReact = useCallback(async (commentId: string, emoji: string) => {
+    const memberDid = user?.did || user?.address
+    if (!memberDid) return
+    await deliberation.toggleReaction(id, commentId, { member_did: memberDid, emoji })
+    deliberation.getThread(id).then(setThread).catch(() => {})
+  }, [id, user])
+
+  // Task toggle handler with optimistic update
+  const handleTaskToggle = useCallback(async (taskId: string, done: boolean) => {
+    // Optimistic update
+    setThread((prev) => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        tasks: prev.tasks.map((t) => t.id === taskId ? { ...t, done } : t),
+      }
+    })
+    deliberation.updateTask(taskId, { done }).catch(() => {
+      // Revert on error
+      setThread((prev) => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          tasks: prev.tasks.map((t) => t.id === taskId ? { ...t, done: !done } : t),
+        }
+      })
+    })
+  }, [])
 
   if (loading) {
     return (
@@ -187,7 +228,7 @@ export default function ThreadDetailPage() {
       {/* 6. Comments section */}
       <div>
         <h2 className="text-lg font-semibold text-iskander-300 mb-4">Discussion</h2>
-        <CommentThread comments={thread.comments} threadId={thread.id} />
+        <CommentThread comments={thread.comments} threadId={thread.id} onReact={handleReact} />
         <CommentComposer
           threadId={thread.id}
           onCommentAdded={(c) =>
@@ -202,7 +243,7 @@ export default function ThreadDetailPage() {
       {thread.tasks.length > 0 && (
         <div>
           <h2 className="text-lg font-semibold text-iskander-300 mb-4">Action Items</h2>
-          <TaskList tasks={thread.tasks} />
+          <TaskList tasks={thread.tasks} onToggle={handleTaskToggle} />
         </div>
       )}
     </div>
