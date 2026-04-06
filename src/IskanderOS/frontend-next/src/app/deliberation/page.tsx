@@ -48,7 +48,7 @@ export default function DeliberationPage() {
         .then(setThreads)
         .catch(() => {})  // silent — main fetch handles errors
     }
-  }, [lastEvent])
+  }, [lastEvent, filters])
 
   // Fetch subgroups — extracted so WorkingGroupPanel can trigger a refetch
   const refetchSubGroups = () => {

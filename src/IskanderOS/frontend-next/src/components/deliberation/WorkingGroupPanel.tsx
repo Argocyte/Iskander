@@ -112,15 +112,16 @@ export function WorkingGroupPanel({ subGroups, onSubGroupsChange }: WorkingGroup
   return (
     <div>
       {/* Toggle header */}
-      <div
-        className="flex justify-between items-center cursor-pointer py-2"
+      <button
+        type="button"
+        className="flex justify-between items-center w-full cursor-pointer py-2"
         onClick={() => setExpanded((prev) => !prev)}
       >
         <span className="text-sm font-medium text-iskander-400 hover:text-iskander-300">
           Working Groups
         </span>
         <span className="text-iskander-400 text-xs">{expanded ? '▲' : '▼'}</span>
-      </div>
+      </button>
 
       {/* Expanded content */}
       {expanded && (

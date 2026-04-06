@@ -237,7 +237,13 @@ export const deliberation = {
   listThreads: (params?: {
     status?: string; tag?: string; sub_group_id?: string; search?: string
   }) => {
-    const q = new URLSearchParams(params as Record<string, string>).toString()
+    const cleaned: Record<string, string> = {}
+    if (params) {
+      for (const [k, v] of Object.entries(params)) {
+        if (v !== undefined) cleaned[k] = v
+      }
+    }
+    const q = new URLSearchParams(cleaned).toString()
     return apiFetch<ThreadSummary[]>(`/deliberation/threads${q ? '?' + q : ''}`)
   },
 

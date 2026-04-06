@@ -62,10 +62,14 @@ export default function ThreadDetailPage() {
 
   // Emoji reaction handler
   const handleReact = useCallback(async (commentId: string, emoji: string) => {
-    const memberDid = user?.did || user?.address
+    const memberDid = user?.did ?? user?.address
     if (!memberDid) return
-    await deliberation.toggleReaction(id, commentId, { member_did: memberDid, emoji })
-    deliberation.getThread(id).then(setThread).catch(() => {})
+    try {
+      await deliberation.toggleReaction(id, commentId, { member_did: memberDid, emoji })
+      deliberation.getThread(id).then(setThread).catch(() => {})
+    } catch {
+      // Reaction toggle failed — silent (non-critical UI action)
+    }
   }, [id, user])
 
   // Task toggle handler with optimistic update

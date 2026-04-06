@@ -100,15 +100,23 @@ export function StanceForm({
       if (reason.trim()) body.reason = reason.trim()
 
       if (processType === 'score' && options) {
-        // Send first score; backend may accept full map
-        const firstOption = options[0]
-        if (firstOption && scores[firstOption] !== undefined) {
-          body.score = scores[firstOption]
-        }
+        body.rank_order = options.map((opt) => ({ option: opt, score: scores[opt] ?? 5 }))
+        body.stance = 'score'
+      }
+
+      if (processType === 'allocate' && options) {
+        body.rank_order = options.map((opt) => ({ option: opt, points: scores[opt] ?? 0 }))
+        body.stance = 'allocate'
       }
 
       if (processType === 'rank') {
         body.rank_order = rankings.map((opt, idx) => ({ option: opt, position: idx + 1 }))
+        body.stance = 'rank'
+      }
+
+      if (processType === 'time_poll') {
+        body.rank_order = selectedOptions.map((opt) => ({ option: opt, selected: true }))
+        body.stance = 'time_poll'
       }
 
       const result = await deliberation.castStance(threadId, proposalId, body)
@@ -121,6 +129,16 @@ export function StanceForm({
   }
 
   const allocateTotal = Object.values(scores).reduce((sum, v) => sum + v, 0)
+
+  function canSubmit(): boolean {
+    if (isStanceBased) return !!selectedStance
+    if (processType === 'choose') return !!selectedStance
+    if (processType === 'time_poll') return selectedOptions.length > 0
+    if (processType === 'allocate') return allocateTotal === 100
+    if (processType === 'score') return true
+    if (processType === 'rank') return rankings.length > 0
+    return false
+  }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -293,7 +311,7 @@ export function StanceForm({
       {/* ── Submit ───────────────────────────────────────────────────────── */}
       <button
         type="submit"
-        disabled={submitting || (!selectedStance && processType !== 'time_poll' && processType !== 'score' && processType !== 'allocate' && processType !== 'rank')}
+        disabled={submitting || !canSubmit()}
         className="bg-iskander-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-iskander-500 disabled:opacity-50 transition-colors"
       >
         {submitting ? 'Submitting\u2026' : isUpdate ? 'Update Vote' : 'Cast Vote'}
