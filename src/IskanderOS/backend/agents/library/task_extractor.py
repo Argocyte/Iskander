@@ -28,17 +28,7 @@ logger = logging.getLogger(__name__)
 
 AGENT_ID = "task-agent-v1"
 
-_role_prompt = load_prompt("prompt_task_extract.txt")
-
-_EXTRACT_SYSTEM = (
-    "You are the Iskander OS Task Agent. "
-    "Extract structured action items from the text. "
-    "Return ONLY a valid JSON object with a 'tasks' array. "
-    "Each task must have: title (string, starts with verb), "
-    "suggested_assignee (string), due_date (YYYY-MM-DD or 'ongoing'). "
-    "If no clear commitments are found, return {\"tasks\": []}. "
-    "No markdown fences, no preamble."
-)
+_EXTRACT_SYSTEM = load_prompt("prompt_task_extract.txt")
 
 
 # ── Node 1: Extract action items via LLM ──────────────────────────────────────

@@ -197,6 +197,13 @@ def trigger_outcome(state: VotingState) -> dict[str, Any]:
     }
 
 
+def _route_after_validation(state: VotingState) -> str:
+    """Short-circuit to END if validation set an error."""
+    if state.get("error"):
+        return END
+    return "record_stance"
+
+
 def _route_after_evaluation(state: VotingState) -> str:
     """Route based on closing condition evaluation."""
     if state.get("close_reason") == "block":
@@ -217,7 +224,12 @@ def build_voting_graph():
     g.add_node("trigger_outcome", trigger_outcome)
 
     g.set_entry_point("validate_stance")
-    g.add_edge("validate_stance", "record_stance")
+    # Short-circuit: if validation fails, skip downstream processing
+    g.add_conditional_edges(
+        "validate_stance",
+        _route_after_validation,
+        {"record_stance": "record_stance", END: END},
+    )
     g.add_edge("record_stance", "compute_tally")
     g.add_edge("compute_tally", "evaluate_closing_condition")
     g.add_conditional_edges(
