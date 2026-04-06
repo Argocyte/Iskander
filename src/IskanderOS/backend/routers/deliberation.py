@@ -6,7 +6,12 @@ Implements Loomio's deliberation model natively:
   Threads → Comments → Proposals → Stances → Outcomes → Tasks
 
 All write operations go to PostgreSQL via asyncpg.
-AI facilitation (DiscussionAgent, ProposalAgent, etc.) is wired in Phase B.
+AI facilitation agents are wired as side-effects after DB writes:
+  - DiscussionAgent (LLM, async) — enqueued after thread creation
+  - ProposalAgent (LLM, async) — enqueued after proposal creation
+  - VotingAgent (deterministic, sync) — invoked inline after stance cast
+  - OutcomeAgent (LLM, async) — enqueued after proposal auto-close
+  - TaskAgent (LLM, async) — enqueued after outcome with action keywords
 
 Endpoints:
   Threads:   GET/POST /deliberation/threads
@@ -23,6 +28,7 @@ Endpoints:
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import uuid
@@ -55,6 +61,20 @@ from backend.schemas.deliberation import (
 )
 
 logger = logging.getLogger(__name__)
+
+# ── Agent imports (Phase B) ───────────────────────────────────────────────
+try:
+    from backend.agents.library.voting import voting_graph
+    from backend.agents.library.discussion import discussion_graph
+    from backend.agents.library.proposal import proposal_graph
+    from backend.agents.library.outcome import outcome_graph
+    from backend.agents.library.task_extractor import task_graph
+    from backend.core.llm_queue_manager import AsyncAgentQueue
+    from backend.api.websocket_notifier import WebSocketNotifier
+    _AGENTS_AVAILABLE = True
+except ImportError:
+    _AGENTS_AVAILABLE = False
+    logger.warning("Deliberation agents not available — running in data-only mode")
 
 router = APIRouter(prefix="/deliberation", tags=["deliberation"])
 
@@ -164,7 +184,37 @@ async def create_thread(
         _uuid(req.sub_group_id) if req.sub_group_id else None,
         req.tags,
     )
-    return ThreadDetail(**dict(row))
+    result = ThreadDetail(**dict(row))
+
+    # ── Phase B: Enqueue DiscussionAgent ──────────────────────────────────
+    if _AGENTS_AVAILABLE:
+        try:
+            queue = AsyncAgentQueue.get_instance()
+            handle = await queue.enqueue(discussion_graph, {
+                "messages": [], "agent_id": "discussion-agent-v1",
+                "action_log": [], "error": None,
+                "thread_id": str(row["id"]), "raw_prompt": req.context,
+                "precedent_docs": [], "draft_context": None,
+                "suggested_invitees": [], "engagement_report": None,
+                "requires_human_token": False,
+            }, {"configurable": {"thread_id": str(row["id"])}})
+            logger.info("DiscussionAgent enqueued: task_id=%s", handle.task_id)
+        except Exception as exc:
+            logger.warning("DiscussionAgent enqueue failed: %s", exc)
+
+    # ── Phase B: WebSocket broadcast ──────────────────────────────────────
+    if _AGENTS_AVAILABLE:
+        try:
+            notifier = WebSocketNotifier.get_instance()
+            await notifier.broadcast({
+                "event": "thread_created",
+                "agent_id": "deliberation-router",
+                "payload": {"thread_id": str(row["id"]), "title": req.title},
+            })
+        except Exception:
+            pass  # WebSocket unavailable — degrade silently
+
+    return result
 
 
 @router.get("/threads/{thread_id}", response_model=ThreadDetail)
@@ -261,7 +311,25 @@ async def add_comment(
         _uuid(req.parent_id) if req.parent_id else None,
         req.body,
     )
-    return CommentResponse(**{**dict(row), "reactions": {}})
+    result = CommentResponse(**{**dict(row), "reactions": {}})
+
+    # ── Phase B: WebSocket broadcast ──────────────────────────────────────
+    if _AGENTS_AVAILABLE:
+        try:
+            notifier = WebSocketNotifier.get_instance()
+            await notifier.broadcast({
+                "event": "comment_added",
+                "agent_id": "deliberation-router",
+                "payload": {
+                    "thread_id": thread_id,
+                    "comment_id": str(row["id"]),
+                    "author_did": req.author_did,
+                },
+            })
+        except Exception:
+            pass  # WebSocket unavailable — degrade silently
+
+    return result
 
 
 @router.post("/threads/{thread_id}/comments/{comment_id}/react",
@@ -341,6 +409,45 @@ async def create_proposal(
     )
     result = dict(row)
     result.update({"stances": [], "tally": ProposalTally(), "outcome": None})
+
+    # ── Phase B: Enqueue ProposalAgent ────────────────────────────────────
+    if _AGENTS_AVAILABLE:
+        try:
+            queue = AsyncAgentQueue.get_instance()
+            comment_rows = await conn.fetch(
+                "SELECT body FROM thread_comments WHERE thread_id = $1 ORDER BY created_at",
+                _uuid(thread_id),
+            )
+            discussion_text = "\n".join(r["body"] for r in comment_rows)
+            handle = await queue.enqueue(proposal_graph, {
+                "messages": [], "agent_id": "proposal-agent-v1",
+                "action_log": [], "error": None,
+                "thread_id": thread_id, "discussion_summary": discussion_text,
+                "recommended_process": None, "draft_proposal": None,
+                "draft_options": [], "closing_at": None,
+                "requires_human_token": False,
+            }, {"configurable": {"thread_id": f"proposal-{row['id']}"}})
+            logger.info("ProposalAgent enqueued: task_id=%s", handle.task_id)
+        except Exception as exc:
+            logger.warning("ProposalAgent enqueue failed: %s", exc)
+
+    # ── Phase B: WebSocket broadcast ──────────────────────────────────────
+    if _AGENTS_AVAILABLE:
+        try:
+            notifier = WebSocketNotifier.get_instance()
+            await notifier.broadcast({
+                "event": "proposal_opened",
+                "agent_id": "deliberation-router",
+                "payload": {
+                    "thread_id": thread_id,
+                    "proposal_id": str(row["id"]),
+                    "title": req.title,
+                    "process_type": req.process_type.value,
+                },
+            })
+        except Exception:
+            pass  # WebSocket unavailable — degrade silently
+
     return ProposalDetail(**result)
 
 
@@ -416,7 +523,100 @@ async def cast_stance(
         req.reason, req.score,
         json.dumps(req.rank_order) if req.rank_order else None,
     )
-    return StanceResponse(**dict(row))
+    result = StanceResponse(**dict(row))
+
+    # ── Phase B: Invoke VotingAgent synchronously ─────────────────────────
+    if _AGENTS_AVAILABLE:
+        try:
+            stance_rows = await conn.fetch(
+                "SELECT stance FROM proposal_stances WHERE proposal_id = $1",
+                _uuid(proposal_id),
+            )
+            voting_state = {
+                "messages": [], "agent_id": "voting-agent-v1",
+                "action_log": [], "error": None,
+                "proposal_id": proposal_id, "process_type": proposal["process_type"],
+                "member_did": req.member_did, "stance": req.stance,
+                "reason": req.reason,
+                "existing_stances": [dict(s) for s in stance_rows],
+                "current_tally": {}, "quorum_pct": proposal.get("quorum_pct", 0),
+                "quorum_met": False,
+                "closing_at": str(proposal["closing_at"]) if proposal.get("closing_at") else None,
+                "closing_condition_met": False, "close_reason": None,
+                "requires_human_token": False,
+            }
+            config = {"configurable": {"thread_id": f"vote-{proposal_id}-{req.member_did}"}}
+
+            await asyncio.to_thread(voting_graph.invoke, voting_state, config)
+            snapshot = await asyncio.to_thread(voting_graph.get_state, config)
+            result_values = snapshot.values
+
+            if result_values.get("error"):
+                logger.warning(
+                    "VotingAgent validation warning for proposal %s: %s",
+                    proposal_id, result_values["error"],
+                )
+
+            if result_values.get("closing_condition_met"):
+                await conn.execute(
+                    "UPDATE deliberation_proposals SET status = 'closed', closed_at = NOW() "
+                    "WHERE id = $1", _uuid(proposal_id),
+                )
+                logger.info(
+                    "Proposal %s auto-closed: %s",
+                    proposal_id, result_values.get("close_reason"),
+                )
+                # Enqueue OutcomeAgent for auto-closed proposal
+                try:
+                    queue = AsyncAgentQueue.get_instance()
+                    tally = result_values.get("current_tally", {})
+                    await queue.enqueue(outcome_graph, {
+                        "messages": [], "agent_id": "outcome-agent-v1",
+                        "action_log": [], "error": None,
+                        "proposal_id": proposal_id, "thread_id": thread_id,
+                        "final_tally": tally, "process_type": proposal["process_type"],
+                        "draft_outcome": None, "decision_type": None,
+                        "precedent_data": None, "should_extract_tasks": False,
+                        "requires_human_token": False,
+                    }, {"configurable": {"thread_id": f"outcome-{proposal_id}"}})
+                except Exception as exc:
+                    logger.warning("OutcomeAgent enqueue failed: %s", exc)
+
+                # Broadcast proposal_closed
+                try:
+                    notifier = WebSocketNotifier.get_instance()
+                    await notifier.broadcast({
+                        "event": "proposal_closed",
+                        "agent_id": "deliberation-router",
+                        "payload": {
+                            "thread_id": thread_id,
+                            "proposal_id": proposal_id,
+                            "close_reason": result_values.get("close_reason"),
+                        },
+                    })
+                except Exception:
+                    pass
+        except Exception as exc:
+            logger.warning("VotingAgent invocation failed: %s", exc)
+
+    # ── Phase B: WebSocket broadcast — stance_cast ────────────────────────
+    if _AGENTS_AVAILABLE:
+        try:
+            notifier = WebSocketNotifier.get_instance()
+            await notifier.broadcast({
+                "event": "stance_cast",
+                "agent_id": "deliberation-router",
+                "payload": {
+                    "thread_id": thread_id,
+                    "proposal_id": proposal_id,
+                    "member_did": req.member_did,
+                    "stance": req.stance,
+                },
+            })
+        except Exception:
+            pass  # WebSocket unavailable — degrade silently
+
+    return result
 
 
 # ── Outcomes ──────────────────────────────────────────────────────────────────
@@ -455,7 +655,45 @@ async def state_outcome(
         raise HTTPException(
             status_code=409, detail="Outcome already stated for this proposal"
         )
-    return OutcomeResponse(**dict(row))
+    result = OutcomeResponse(**dict(row))
+
+    # ── Phase B: WebSocket broadcast — outcome_stated ─────────────────────
+    if _AGENTS_AVAILABLE:
+        try:
+            notifier = WebSocketNotifier.get_instance()
+            await notifier.broadcast({
+                "event": "outcome_stated",
+                "agent_id": "deliberation-router",
+                "payload": {
+                    "thread_id": thread_id,
+                    "proposal_id": proposal_id,
+                    "outcome_id": str(row["id"]),
+                    "decision_type": req.decision_type.value,
+                },
+            })
+        except Exception:
+            pass  # WebSocket unavailable — degrade silently
+
+    # ── Phase B: Conditionally enqueue TaskAgent for action items ─────────
+    if _AGENTS_AVAILABLE:
+        try:
+            from backend.agents.library.outcome import ACTION_KEYWORDS
+            action_keywords = ACTION_KEYWORDS
+            if any(kw in req.statement.lower() for kw in action_keywords):
+                queue = AsyncAgentQueue.get_instance()
+                await queue.enqueue(task_graph, {
+                    "messages": [], "agent_id": "task-agent-v1",
+                    "action_log": [], "error": None,
+                    "source_text": req.statement, "thread_id": thread_id,
+                    "outcome_id": str(row["id"]),
+                    "extracted_tasks": [], "confirmed_tasks": [],
+                    "requires_human_token": False,
+                }, {"configurable": {"thread_id": f"tasks-{row['id']}"}})
+                logger.info("TaskAgent enqueued for outcome %s", row["id"])
+        except Exception as exc:
+            logger.warning("TaskAgent enqueue failed: %s", exc)
+
+    return result
 
 
 # ── Tasks ─────────────────────────────────────────────────────────────────────
@@ -482,7 +720,25 @@ async def create_task(
         _uuid(req.outcome_id) if req.outcome_id else None,
         req.title, req.assignee_did, req.due_date, req.created_by,
     )
-    return TaskResponse(**dict(row))
+    result = TaskResponse(**dict(row))
+
+    # ── Phase B: WebSocket broadcast — task_created ───────────────────────
+    if _AGENTS_AVAILABLE:
+        try:
+            notifier = WebSocketNotifier.get_instance()
+            await notifier.broadcast({
+                "event": "task_created",
+                "agent_id": "deliberation-router",
+                "payload": {
+                    "thread_id": thread_id,
+                    "task_id": str(row["id"]),
+                    "title": req.title,
+                },
+            })
+        except Exception:
+            pass  # WebSocket unavailable — degrade silently
+
+    return result
 
 
 @router.patch("/tasks/{task_id}", response_model=TaskResponse)

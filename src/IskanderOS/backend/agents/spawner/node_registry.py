@@ -97,6 +97,47 @@ def _build_registry() -> dict[str, Callable]:
         compute_updated_probability,
         broadcast_audit_summary,
     )
+    from backend.agents.library.voting import (
+        validate_stance,
+        record_stance,
+        compute_tally,
+        evaluate_closing_condition,
+        notify_block,
+        trigger_outcome,
+    )
+    from backend.agents.library.discussion import (
+        receive_prompt,
+        research_precedents,
+        draft_thread_context,
+        human_edit_context,
+        publish_thread,
+        suggest_invitees,
+        notify_members,
+    )
+    from backend.agents.library.proposal import (
+        summarise_discussion,
+        recommend_process,
+        draft_proposal_text,
+        human_edit_proposal,
+        open_poll,
+        notify_participants,
+    )
+    from backend.agents.library.outcome import (
+        tally_final_results,
+        classify_decision,
+        draft_outcome_statement,
+        human_approve_outcome,
+        publish_outcome,
+        store_precedent_data,
+        broadcast_outcome,
+        invoke_task_agent,
+    )
+    from backend.agents.library.task_extractor import (
+        extract_action_items,
+        confirm_assignments,
+        create_task_records,
+        schedule_reminders,
+    )
     from backend.matrix.bridge import AgentBridge
 
     _bridge = AgentBridge.get_instance()
@@ -160,6 +201,42 @@ def _build_registry() -> dict[str, Callable]:
         "send_matrix_notification": _bridge.send_matrix_notification_node,
         # Generic
         "hitl_breakpoint": _generic_hitl_breakpoint,
+        # Deliberation: Voting nodes (Phase B — deterministic, no LLM)
+        "validate_stance":            validate_stance,
+        "record_stance":              record_stance,
+        "compute_tally":              compute_tally,
+        "evaluate_closing_condition": evaluate_closing_condition,
+        "notify_block":               notify_block,
+        "trigger_outcome":            trigger_outcome,
+        # Deliberation: Discussion nodes (Phase B — LLM + HITL)
+        "receive_prompt":        receive_prompt,
+        "research_precedents":   research_precedents,
+        "draft_thread_context":  draft_thread_context,
+        "human_edit_context":    human_edit_context,
+        "publish_thread":        publish_thread,
+        "suggest_invitees":      suggest_invitees,
+        "notify_members":        notify_members,
+        # Deliberation: Proposal nodes (Phase B — LLM + HITL)
+        "summarise_discussion":  summarise_discussion,
+        "recommend_process":     recommend_process,
+        "draft_proposal_text":   draft_proposal_text,
+        "human_edit_proposal":   human_edit_proposal,
+        "open_poll":             open_poll,
+        "notify_participants":   notify_participants,
+        # Deliberation: Outcome nodes (Phase B — LLM + HITL)
+        "tally_final_results":     tally_final_results,
+        "classify_decision":       classify_decision,
+        "draft_outcome_statement": draft_outcome_statement,
+        "human_approve_outcome":   human_approve_outcome,
+        "publish_outcome":         publish_outcome,
+        "store_precedent_data":    store_precedent_data,
+        "broadcast_outcome":       broadcast_outcome,
+        "invoke_task_agent":       invoke_task_agent,
+        # Deliberation: Task Extractor nodes (Phase B — LLM + HITL)
+        "extract_action_items":  extract_action_items,
+        "confirm_assignments":   confirm_assignments,
+        "create_task_records":   create_task_records,
+        "schedule_reminders":    schedule_reminders,
     }
 
 

@@ -332,5 +332,12 @@ class Settings(BaseSettings):
     genesis_boot_complete_file: str = ".genesis_complete"
     genesis_founder_token_bcrypt_rounds: int = 12
 
+    # ── Deliberation Facilitator Agents (Phase B) ───────────────────────
+    deliberation_context_max_tokens: int = 800
+    deliberation_proposal_default_days: int = 7
+    deliberation_quorum_default_pct: int = 0        # 0 = no quorum required
+    deliberation_consent_auto_close_on_block: bool = True
+    deliberation_outcome_require_approval: bool = True
+
 
 settings = Settings()
