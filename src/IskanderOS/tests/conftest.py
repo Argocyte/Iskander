@@ -9,6 +9,9 @@ from unittest.mock import AsyncMock
 from backend.main import app
 
 
+# pytest-asyncio >= 0.21 with asyncio_mode = auto creates a fresh event loop
+# per test function by default — no session-scoped event_loop override needed.
+# If session-scoped async fixtures are added in future, revisit this decision.
 @pytest_asyncio.fixture
 async def async_client():
     """HTTP test client backed by the FastAPI app (no real DB)."""

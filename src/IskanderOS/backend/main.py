@@ -9,15 +9,26 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import settings
-from backend.db import close_pool
+from backend.db import close_pool, init_pool
 
 logger = structlog.get_logger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logger.info("iskander_node_starting", domain=settings.activitypub_domain)
+    from backend.core.llm_queue_manager import AsyncAgentQueue
+    try:
+        await init_pool()
+        logger.info("asyncpg_pool_initialised")
+    except Exception as exc:
+        logger.warning("asyncpg_pool_unavailable", error=str(exc))
+    AsyncAgentQueue.get_instance().start()
+    logger.info("iskander_agent_queue_started")
     yield
+    AsyncAgentQueue.get_instance().stop()
     await close_pool()
+    logger.info("iskander_node_stopping")
 
 
 app = FastAPI(
@@ -140,17 +151,3 @@ async def health() -> dict:
         "ws_connections": WebSocketNotifier.get_instance().active_connections(),
     }
 
-
-@app.on_event("startup")
-async def on_startup() -> None:
-    logger.info("iskander_node_starting", domain=settings.activitypub_domain)
-    from backend.core.llm_queue_manager import AsyncAgentQueue
-    AsyncAgentQueue.get_instance().start()
-    logger.info("iskander_agent_queue_started")
-
-
-@app.on_event("shutdown")
-async def on_shutdown() -> None:
-    from backend.core.llm_queue_manager import AsyncAgentQueue
-    AsyncAgentQueue.get_instance().stop()
-    logger.info("iskander_node_stopping")

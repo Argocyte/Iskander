@@ -20,7 +20,6 @@ import logging
 from typing import AsyncGenerator
 
 import asyncpg
-from fastapi import HTTPException
 
 from backend.config import settings
 
@@ -43,6 +42,15 @@ async def get_pool() -> asyncpg.Pool:
             logger.error("Failed to create asyncpg pool: %s", exc)
             raise
     return _pool
+
+
+async def init_pool() -> None:
+    """Eagerly initialise the pool at application startup.
+
+    Call from the lifespan context manager so connection failures
+    surface immediately rather than on the first incoming request.
+    """
+    await get_pool()
 
 
 async def close_pool() -> None:
