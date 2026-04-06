@@ -53,7 +53,7 @@ async def file_dispute(
 
     initial_state = {
         "messages": [],
-        "agent_id": AGENT_ID := "arbitrator-agent-v1",
+        "agent_id": (AGENT_ID := "arbitrator-agent-v1"),
         "action_log": [],
         "error": None,
         "dispute": {**body.model_dump(), "case_id": case_id},
