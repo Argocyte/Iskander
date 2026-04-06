@@ -16,6 +16,7 @@ Usage in FastAPI endpoints:
 """
 from __future__ import annotations
 
+import json
 import logging
 from typing import AsyncGenerator
 
@@ -28,6 +29,17 @@ logger = logging.getLogger(__name__)
 _pool: asyncpg.Pool | None = None
 
 
+async def _set_json_codec(conn: asyncpg.Connection) -> None:
+    """Register JSONB codec on each new pool connection so columns decode to Python objects."""
+    await conn.set_type_codec(
+        "jsonb",
+        encoder=json.dumps,
+        decoder=json.loads,
+        schema="pg_catalog",
+        format="text",
+    )
+
+
 async def get_pool() -> asyncpg.Pool:
     """Return the singleton asyncpg connection pool, creating it on first call."""
     global _pool
@@ -36,7 +48,12 @@ async def get_pool() -> asyncpg.Pool:
         # Strip the driver prefix for raw asyncpg
         dsn = settings.database_url.replace("postgresql+asyncpg://", "postgresql://")
         try:
-            _pool = await asyncpg.create_pool(dsn, min_size=2, max_size=10)
+            _pool = await asyncpg.create_pool(
+                dsn,
+                min_size=2,
+                max_size=10,
+                init=_set_json_codec,
+            )
             logger.info("asyncpg pool initialised: %s", dsn.split("@")[-1])
         except Exception as exc:
             logger.error("Failed to create asyncpg pool: %s", exc)

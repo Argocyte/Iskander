@@ -22,7 +22,8 @@ async def lifespan(app: FastAPI):
         await init_pool()
         logger.info("asyncpg_pool_initialised")
     except Exception as exc:
-        logger.warning("asyncpg_pool_unavailable", error=str(exc))
+        logger.error("asyncpg_pool_unavailable", error=str(exc))
+        raise
     AsyncAgentQueue.get_instance().start()
     logger.info("iskander_agent_queue_started")
     yield
