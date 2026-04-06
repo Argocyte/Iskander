@@ -351,3 +351,65 @@ class BootState(AgentState):
     boot_phase:               str
     boot_complete:            bool
     requires_human_token:     bool
+
+
+class DiscussionState(AgentState):
+    """State for the Deliberation DiscussionAgent."""
+    thread_id:          str | None
+    raw_prompt:         str | None
+    precedent_docs:     list[dict[str, Any]]
+    draft_context:      str | None
+    suggested_invitees: list[str]
+    engagement_report:  dict[str, Any] | None
+    requires_human_token: bool
+
+
+class ProposalState(AgentState):
+    """State for the Deliberation ProposalAgent."""
+    thread_id:            str | None
+    discussion_summary:   str | None
+    recommended_process:  str | None
+    draft_proposal:       str | None
+    draft_options:        list[str]
+    closing_at:           str | None
+    requires_human_token: bool
+
+
+class VotingState(AgentState):
+    """State for the Deliberation VotingAgent (no LLM — pure deterministic)."""
+    proposal_id:           str | None
+    process_type:          str | None
+    member_did:            str | None
+    stance:                str | None
+    reason:                str | None
+    existing_stances:      list[dict[str, Any]]
+    current_tally:         dict[str, int]
+    quorum_pct:            int
+    quorum_met:            bool
+    closing_at:            str | None
+    closing_condition_met: bool
+    close_reason:          str | None
+    requires_human_token:  bool
+
+
+class OutcomeState(AgentState):
+    """State for the Deliberation OutcomeAgent."""
+    proposal_id:          str | None
+    thread_id:            str | None
+    final_tally:          dict[str, int]
+    process_type:         str | None
+    draft_outcome:        str | None
+    decision_type:        str | None
+    precedent_data:       dict[str, Any] | None
+    should_extract_tasks: bool
+    requires_human_token: bool
+
+
+class TaskExtractionState(AgentState):
+    """State for the Deliberation TaskAgent."""
+    source_text:      str | None
+    thread_id:        str | None
+    outcome_id:       str | None
+    extracted_tasks:  list[dict[str, Any]]
+    confirmed_tasks:  list[dict[str, Any]]
+    requires_human_token: bool
