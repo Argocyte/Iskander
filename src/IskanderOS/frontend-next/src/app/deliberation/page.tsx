@@ -21,6 +21,7 @@ export default function DeliberationPage() {
     search?: string;
   }>({});
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [subGroupsLoading, setSubGroupsLoading] = useState(true);
 
   // Fetch threads on mount and whenever filters change
   useEffect(() => {
@@ -43,7 +44,8 @@ export default function DeliberationPage() {
       .then((data) => setSubGroupsList(data))
       .catch(() => {
         // Non-critical — filters still render without subgroups
-      });
+      })
+      .finally(() => setSubGroupsLoading(false));
   }, []);
 
   return (
@@ -70,7 +72,7 @@ export default function DeliberationPage() {
         filters={filters}
         onFiltersChange={setFilters}
         subGroups={subGroupsList}
-        subGroupsLoading={false}
+        subGroupsLoading={subGroupsLoading}
       />
 
       {/* Thread list */}
