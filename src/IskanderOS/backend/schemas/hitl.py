@@ -74,7 +74,13 @@ class HITLProposal(BaseModel):
         default_factory=lambda: str(uuid.uuid4()),
         description="Unique proposal identifier.",
     )
-    proposal_type: Literal["governance", "treasury", "steward", "arbitration", "ipd"] = Field(
+    proposal_type: Literal[
+        "governance", "treasury", "steward", "arbitration", "ipd",
+        "discussion_context",
+        "proposal_draft",
+        "outcome_approval",
+        "task_assignment",
+    ] = Field(
         ..., description="Which agent domain originated this HITL request.",
     )
     summary: str = Field(
@@ -118,7 +124,7 @@ class HITLNotification(BaseModel):
     )
     member_did: str = Field(..., description="DID of the member who must vote.")
     proposal: HITLProposal = Field(..., description="The full proposal payload.")
-    route: Literal["activitypub", "local_db"] = Field(
+    route: Literal["activitypub", "local_db", "loomio"] = Field(
         ..., description="How this notification was delivered.",
     )
     status: Literal["pending", "approved", "rejected", "expired"] = Field(
@@ -141,7 +147,7 @@ class HITLRoutingResult(BaseModel):
     Tells the caller which path was taken and whether delivery succeeded.
     Always includes a Glass Box AgentAction for the audit log.
     """
-    route: Literal["activitypub", "local_db"] = Field(
+    route: Literal["activitypub", "local_db", "loomio"] = Field(
         ..., description="Delivery channel used.",
     )
     proposal_id: str = Field(..., description="The routed proposal's ID.")

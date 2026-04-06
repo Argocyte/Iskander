@@ -58,3 +58,32 @@ class TestDeliberationSchemas:
             last_activity=datetime.now(timezone.utc),
         )
         assert s.open_proposal_count == 1
+
+
+class TestHITLExtensions:
+    def test_new_proposal_types_accepted(self):
+        from backend.schemas.hitl import HITLProposal
+        p = HITLProposal(
+            proposal_type="discussion_context",
+            summary="AI drafted thread context for payroll discussion",
+            agent_id="discussion-agent-v1",
+            thread_id="thread-abc",
+            callback_inbox="http://localhost:8000/hitl/callback",
+        )
+        assert p.proposal_type == "discussion_context"
+
+    def test_loomio_route_accepted(self):
+        from backend.schemas.hitl import HITLNotification, HITLProposal
+        from datetime import datetime, timezone
+        n = HITLNotification(
+            member_did="did:example:alice",
+            proposal=HITLProposal(
+                proposal_type="proposal_draft",
+                summary="Test",
+                agent_id="proposal-agent",
+                thread_id="t1",
+                callback_inbox="http://cb",
+            ),
+            route="loomio",
+        )
+        assert n.route == "loomio"
