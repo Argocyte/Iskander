@@ -92,3 +92,20 @@ class TestVotingGraph:
         result = snapshot.values
         assert result["closing_condition_met"] is False
         assert len(result["action_log"]) >= 4  # 4 nodes
+
+    def test_invalid_block_short_circuits(self):
+        """Block on non-consent/consensus process should short-circuit to END."""
+        from backend.agents.library.voting import build_voting_graph
+        graph = build_voting_graph()
+        state = _base_state(
+            stance="block", process_type="score",
+            existing_stances=[{"stance": "agree"}],
+        )
+        config = {"configurable": {"thread_id": "test-block-shortcircuit"}}
+        graph.invoke(state, config=config)
+        snapshot = graph.get_state(config)
+        result = snapshot.values
+        assert result["error"] is not None
+        assert "block" in result["error"].lower()
+        # Only 1 action logged (validate_stance), no tally/closing nodes
+        assert len(result["action_log"]) == 1

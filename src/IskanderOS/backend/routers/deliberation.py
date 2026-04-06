@@ -677,7 +677,8 @@ async def state_outcome(
     # ── Phase B: Conditionally enqueue TaskAgent for action items ─────────
     if _AGENTS_AVAILABLE:
         try:
-            action_keywords = ["should", "must", "will", "assign", "needs to", "action", "task"]
+            from backend.agents.library.outcome import ACTION_KEYWORDS
+            action_keywords = ACTION_KEYWORDS
             if any(kw in req.statement.lower() for kw in action_keywords):
                 queue = AsyncAgentQueue.get_instance()
                 await queue.enqueue(task_graph, {
