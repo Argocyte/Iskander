@@ -5,6 +5,20 @@
  * Auto-injects JWT Authorization header from auth state.
  */
 
+import type {
+  ThreadSummary,
+  ThreadDetail,
+  CommentResponse,
+  ProposalDetail,
+  StanceResponse,
+  OutcomeResponse,
+  TaskResponse,
+  SubGroup,
+  SubGroupMember,
+  ProcessType,
+  DecisionType,
+} from "../types";
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 let accessToken: string | null = null;
@@ -217,4 +231,116 @@ export const ipdAudit = {
     apiFetch(`/ipd-audit/pairwise?node_a=${nodeA}&node_b=${nodeB}`),
 };
 
-export default { auth, system, governance, treasury, escrow, ipdAudit };
+// ── Deliberation API ──────────────────────────────────────────────────────
+
+export const deliberation = {
+  listThreads: (params?: {
+    status?: string; tag?: string; sub_group_id?: string; search?: string
+  }) => {
+    const q = new URLSearchParams(params as Record<string, string>).toString()
+    return apiFetch<ThreadSummary[]>(`/deliberation/threads${q ? '?' + q : ''}`)
+  },
+
+  createThread: (body: {
+    title: string; context?: string; author_did: string;
+    sub_group_id?: string; tags?: string[]
+  }) => apiFetch<ThreadDetail>('/deliberation/threads', {
+    method: 'POST', body: JSON.stringify(body),
+  }),
+
+  getThread: (threadId: string) =>
+    apiFetch<ThreadDetail>(`/deliberation/threads/${threadId}`),
+
+  updateThread: (threadId: string, body: {
+    title?: string; context?: string; status?: string; tags?: string[]
+  }) => apiFetch<ThreadDetail>(`/deliberation/threads/${threadId}`, {
+    method: 'PATCH', body: JSON.stringify(body),
+  }),
+
+  addComment: (threadId: string, body: {
+    thread_id: string; author_did: string; body: string; parent_id?: string
+  }) => apiFetch<CommentResponse>(`/deliberation/threads/${threadId}/comments`, {
+    method: 'POST', body: JSON.stringify(body),
+  }),
+
+  toggleReaction: (threadId: string, commentId: string, body: {
+    member_did: string; emoji: string
+  }) => apiFetch<{ action: string; emoji: string }>(
+    `/deliberation/threads/${threadId}/comments/${commentId}/react`,
+    { method: 'POST', body: JSON.stringify(body) },
+  ),
+
+  markSeen: (threadId: string, memberDid: string) =>
+    apiFetch<{ status: string }>(
+      `/deliberation/threads/${threadId}/seen?member_did=${encodeURIComponent(memberDid)}`,
+      { method: 'POST' },
+    ),
+
+  createProposal: (threadId: string, body: {
+    thread_id: string; title: string; body: string;
+    process_type: ProcessType; author_did: string;
+    options?: string[]; quorum_pct?: number; closing_at?: string
+  }) => apiFetch<ProposalDetail>(
+    `/deliberation/threads/${threadId}/proposals`,
+    { method: 'POST', body: JSON.stringify(body) },
+  ),
+
+  getProposal: (threadId: string, proposalId: string) =>
+    apiFetch<ProposalDetail>(
+      `/deliberation/threads/${threadId}/proposals/${proposalId}`
+    ),
+
+  castStance: (threadId: string, proposalId: string, body: {
+    member_did: string; stance: string; reason?: string;
+    score?: number; rank_order?: Record<string, unknown>[]
+  }) => apiFetch<StanceResponse>(
+    `/deliberation/threads/${threadId}/proposals/${proposalId}/stance`,
+    { method: 'POST', body: JSON.stringify(body) },
+  ),
+
+  stateOutcome: (threadId: string, proposalId: string, body: {
+    statement: string; decision_type: DecisionType; stated_by: string
+  }) => apiFetch<OutcomeResponse>(
+    `/deliberation/threads/${threadId}/proposals/${proposalId}/outcome`,
+    { method: 'POST', body: JSON.stringify(body) },
+  ),
+
+  createTask: (threadId: string, body: {
+    thread_id: string; title: string; created_by: string;
+    assignee_did?: string; due_date?: string; outcome_id?: string
+  }) => apiFetch<TaskResponse>(
+    `/deliberation/threads/${threadId}/tasks`,
+    { method: 'POST', body: JSON.stringify(body) },
+  ),
+
+  updateTask: (taskId: string, body: {
+    done?: boolean; assignee_did?: string; due_date?: string; title?: string
+  }) => apiFetch<TaskResponse>(`/deliberation/tasks/${taskId}`, {
+    method: 'PATCH', body: JSON.stringify(body),
+  }),
+}
+
+// ── SubGroups API ─────────────────────────────────────────────────────────
+
+export const subgroups = {
+  list: () => apiFetch<SubGroup[]>('/subgroups'),
+
+  create: (body: { slug: string; name: string; created_by: string; description?: string }) =>
+    apiFetch<SubGroup>('/subgroups', { method: 'POST', body: JSON.stringify(body) }),
+
+  listMembers: (subgroupId: string) =>
+    apiFetch<SubGroupMember[]>(`/subgroups/${subgroupId}/members`),
+
+  addMember: (subgroupId: string, body: { member_did: string; role?: string }) =>
+    apiFetch<SubGroupMember>(`/subgroups/${subgroupId}/members`, {
+      method: 'POST', body: JSON.stringify(body),
+    }),
+
+  removeMember: (subgroupId: string, memberDid: string) =>
+    apiFetch<void>(
+      `/subgroups/${subgroupId}/members/${encodeURIComponent(memberDid)}`,
+      { method: 'DELETE' },
+    ),
+}
+
+export default { auth, system, governance, treasury, escrow, ipdAudit, deliberation, subgroups };
