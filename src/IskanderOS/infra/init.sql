@@ -1314,7 +1314,7 @@ CREATE INDEX IF NOT EXISTS idx_stances_proposal ON proposal_stances(proposal_id)
 -- Outcome statements (recorded after proposals close)
 CREATE TABLE IF NOT EXISTS decision_outcomes (
     id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    proposal_id   UUID NOT NULL UNIQUE REFERENCES deliberation_proposals(id),
+    proposal_id   UUID NOT NULL UNIQUE REFERENCES deliberation_proposals(id) ON DELETE CASCADE,
     statement     TEXT NOT NULL,
     decision_type TEXT NOT NULL
                   CHECK (decision_type IN ('passed', 'rejected', 'withdrawn', 'no_quorum')),
