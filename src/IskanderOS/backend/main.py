@@ -95,6 +95,7 @@ from backend.routers.diplomacy             import router as diplomacy_router
 from backend.routers.genesis               import router as genesis_router
 # Deliberation Data Layer — working group management
 from backend.routers.subgroups             import router as subgroups_router
+from backend.routers.deliberation          import router as deliberation_router
 
 app.include_router(constitution_router)
 app.include_router(federation_router)
@@ -139,6 +140,7 @@ app.include_router(diplomacy_router)            # /diplomacy/sdc, /diplomacy/ing
 app.include_router(genesis_router)          # /genesis/status, /genesis/boot, /genesis/founders, etc.
 # Deliberation Data Layer — working group management
 app.include_router(subgroups_router)        # /subgroups — working group management
+app.include_router(deliberation_router)      # /deliberation — threads, proposals, votes
 
 
 @app.get("/health", tags=["system"])
