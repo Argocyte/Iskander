@@ -26,8 +26,12 @@ export function ProcessTypeBadge({ processType, showLabel = true }: ProcessTypeB
   const colorClass = colorMap[processType] ?? 'bg-iskander-800 text-iskander-400'
   const label      = formatLabel(processType)
 
+  // When showLabel=false, renders a color-only dot (intentional for compact layouts)
   return (
-    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${colorClass}`}>
+    <span
+      className={`rounded-full px-2 py-0.5 text-xs font-medium ${colorClass}`}
+      {...(!showLabel && { 'aria-label': label })}
+    >
       {showLabel ? label : null}
     </span>
   )

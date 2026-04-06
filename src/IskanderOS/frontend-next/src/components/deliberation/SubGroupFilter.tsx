@@ -14,6 +14,7 @@ export function SubGroupFilter({ subGroups, selectedId, onChange }: SubGroupFilt
   return (
     <div className="flex flex-wrap gap-2">
       <button
+        type="button"
         className={`${baseClass} ${selectedId === null ? activeClass : inactiveClass}`}
         onClick={() => onChange(null)}
       >
@@ -21,6 +22,7 @@ export function SubGroupFilter({ subGroups, selectedId, onChange }: SubGroupFilt
       </button>
       {subGroups.map(subGroup => (
         <button
+          type="button"
           key={subGroup.id}
           className={`${baseClass} ${selectedId === subGroup.id ? activeClass : inactiveClass}`}
           onClick={() => onChange(subGroup.id)}

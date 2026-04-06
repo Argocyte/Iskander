@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { SubGroup } from '@/types'
 import { SubGroupFilter } from './SubGroupFilter'
 
@@ -30,6 +30,17 @@ export function ThreadFilters({
 }: ThreadFiltersProps) {
   const [searchInput, setSearchInput] = useState(filters.search ?? '')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const filtersRef = useRef(filters)
+
+  // Keep filtersRef in sync so debounced callback never uses stale filters
+  useEffect(() => { filtersRef.current = filters })
+
+  // Clean up debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [])
 
   function handleStatusClick(value: string | undefined) {
     onFiltersChange({ ...filters, status: value })
@@ -40,7 +51,7 @@ export function ThreadFilters({
     setSearchInput(val)
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
-      onFiltersChange({ ...filters, search: val || undefined })
+      onFiltersChange({ ...filtersRef.current, search: val || undefined })
     }, 300)
   }
 
@@ -58,6 +69,7 @@ export function ThreadFilters({
             const isActive = filters.status === tab.value
             return (
               <button
+                type="button"
                 key={tab.label}
                 className={`${tabBase} ${isActive ? tabActive : tabInactive}`}
                 onClick={() => handleStatusClick(tab.value)}
