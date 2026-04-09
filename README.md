@@ -1,152 +1,161 @@
-# Project Iskander
+# Iskander
 
-**Sovereign AI Operating System for Cooperative Autonomy**
+**A cooperative-in-a-box: one boot gives your cooperative decisions, files, AI assistance, and a web presence -- all behind single sign-on.**
 
 [![License: AGPL-3.0-only](https://img.shields.io/badge/License-AGPL--3.0--only-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
-[![Hardware: CERN-OHL-S v2](https://img.shields.io/badge/Hardware-CERN--OHL--S%20v2-orange.svg)](https://ohwr.org/cern_ohl_s_v2.txt)
-[![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB.svg)](https://python.org)
 [![Solidity 0.8.24](https://img.shields.io/badge/Solidity-0.8.24-363636.svg)](https://soliditylang.org)
-[![Gnosis Chain](https://img.shields.io/badge/Chain-Gnosis-3e6957.svg)](https://www.gnosis.io)
 
 ---
 
-## Overview
+## What Is Iskander?
 
-Cooperatives and platform co-ops face a structural dilemma: the digital tools they depend on are built by and for extractive business models. Cloud platforms centralise data, SaaS vendors capture value, and off-the-shelf governance software assumes hierarchical command structures that contradict cooperative principles. The result is cooperatives running their democratic organisations on autocratic infrastructure.
+Iskander is a self-hosted server for cooperatives. Run it once and your cooperative gets:
 
-Project Iskander is a sovereign agentic AI operating system purpose-built for Distributed Cooperatives (DisCOs) and Platform Co-ops. It combines AI-assisted decision-making with mandatory transparency (the Glass Box Protocol), blockchain-anchored governance on Gnosis Chain, federated mesh storage via IPFS, energy-aware hardware scheduling, and anti-extractive economics -- all aligned to the ICA Cooperative Principles. Every agent action carries a structured rationale with an ethical impact assessment; no black-box decisions are permitted by design.
+- **Loomio** -- democratic decision-making (proposals, votes, discussions, STV elections)
+- **AI Clerk** -- a conversational assistant that helps members participate, draft documents, and understand decisions
+- **Nextcloud** -- shared files, calendar, contacts, email
+- **Glass Box** -- every AI action is transparent and auditable by any member
+- **Treasury monitoring** -- an AI Steward watches the cooperative's wallet and creates proposals for significant spending
+- **Cooperative website** -- public transparency, membership applications, federation directory
+- **Single Sign-On** -- one account (via Authentik) accesses everything
+- **Blockchain anchoring** -- decisions recorded on-chain with IPFS hashes for tamper-proof history
+- **Zero-knowledge voting** -- MACI secret ballots where individual votes are never disclosed
+- **Federation** -- cooperatives discover and communicate with each other
 
-Iskander ships as a complete stack: smart contracts for on-chain governance, a Python backend with 13+ LangGraph agent graphs, a Next.js frontend, and open hardware specifications (Iskander Hearth) so cooperatives can build, own, and repair their own physical infrastructure. The genesis boot sequence enforces identity-first, governance-second initialisation with regulatory floor compliance, ensuring that every cooperative starts from a legally and ethically sound foundation.
+All of this is aligned to the **ICA Cooperative Principles** -- the seven internationally recognised principles defined by the International Co-operative Alliance. The AI agents embody the six core cooperative values (self-help, self-responsibility, democracy, equality, equity, solidarity) and four ethical values (honesty, openness, social responsibility, caring for others).
 
 ---
 
 ## Architecture
 
 ```
-+-------------------------------------------------------------------+
-|                     ISKANDER SOVEREIGN NODE                       |
-+-------------------------------------------------------------------+
-|  +--------------+  +--------------+  +----------------------+     |
-|  |   Frontend   |  |   FastAPI    |  |  LangGraph Agents    |     |
-|  |  (Next.js)   |--|  27+ Routers |--|  13+ StateGraphs     |     |
-|  +--------------+  +------+-------+  +----------+-----------+     |
-|                           |                      |                |
-|  +------------------------+----------------------+-------------+  |
-|  |               Glass Box Protocol Layer                      |  |
-|  |  AgentAction(agent_id, action, rationale, ethical_impact)   |  |
-|  +----------------------------+--------------------------------+  |
-|                               |                                   |
-|  +----------+  +---------+   |   +------------+  +------------+  |
-|  |PostgreSQL|  | pgvector|   |   |    IPFS    |  |  Gnosis    |  |
-|  | 30+ tbl  |  |   RAG   |   |   |Mesh Archive|  |  Chain     |  |
-|  +----------+  +---------+   |   +------------+  +------------+  |
-|                               |                                   |
-|  +----------------------------+--------------------------------+  |
-|  |             Energy Gate (Hearth Driver)                      |  |
-|  |    @energy_gated_execution -> GREEN / YELLOW / RED policies |  |
-|  +-------------------------------------------------------------+  |
-+-------------------------------------------------------------------+
+                        +---------------------------+
+                        |    Authentik (SSO/OIDC)    |
+                        |  One login for everything  |
+                        +----+--------+--------+-----+
+                             |        |        |
+              +--------------+--+ +---+----+ +-+-------------+
+              |  Loomio + Chat  | |Nextcloud| | Coop Website  |
+              |  Widget (Clerk) | | Files   | | (Public +     |
+              |  Decisions      | | Email   | |  Members)     |
+              +-------+---------+ +--------++ +---------------+
+                      |
+        OpenClaw (Clerk + Steward agents)
+                      |
+           +----------+-----------+
+           |                      |
+      Ollama (LLM)     Decision Recorder
+                        (PostgreSQL + IPFS)
 ```
 
-The architecture is layered around a single principle: **every action must be transparent and reversible by collective decision**. The Glass Box Protocol sits between the API surface and all data stores, ensuring that no agent can write to the database, blockchain, or mesh without emitting a structured rationale. The Energy Gate at the bottom enforces hardware-aware scheduling, gracefully degrading non-essential services when power budgets tighten.
+### Services (Phase C MVP -- 8 containers, ~8GB RAM)
+
+| Service | Purpose |
+|---------|---------|
+| PostgreSQL 16 | Shared database (Loomio, Nextcloud, Authentik, decisions) |
+| Redis | Session store and job queue |
+| Authentik | OAuth2/OIDC identity provider -- SSO for all services |
+| Loomio | Democratic decision-making platform with Iskander chat widget |
+| Nextcloud | File hosting, calendar, contacts, email client |
+| Ollama | Local LLM inference (Phi-3-mini or OLMo) |
+| OpenClaw | AI agent orchestrator (Clerk + Steward agents) |
+| IPFS Kubo | Decision record pinning for tamper-proof history |
+
+### Phase B Expansion (Weeks 4-8)
+
+Adds: Anvil (EVM node), Stalwart (email server), Caddy (cooperative website), Dendrite (Matrix chat), bringing the total to 11+ services.
 
 ---
 
-## Key Subsystems
+## The AI Clerk
 
-| Subsystem | Description | Key Files / Contracts |
-|---|---|---|
-| **Glass Box Protocol** | Mandatory transparency layer; every agent action includes rationale and ethical impact level | `backend/core/` |
-| **Governance Orchestrator** | LangGraph agent coordinating proposals, consent rounds, and delegation | `backend/agents/governance_agent.py` |
-| **Genesis Boot Sequence** | One-way cooperative initialisation: identity first, governance second, with HITL breakpoints | `backend/agents/genesis/` |
-| **PolicyEngine** | ICA compliance gate; hardcoded principles that cannot be overridden at runtime | `backend/core/` |
-| **Smart Contracts** | 10 Solidity contracts on Gnosis Chain (SBT identity, MACI voting, escrow, payroll, etc.) | `contracts/src/` |
-| **Mesh Archive** | Federated IPFS storage with SBT-gated access control and content addressing | `backend/mesh/` |
-| **Energy Scheduler** | Tri-state GREEN/YELLOW/RED execution policies driven by Hearth hardware sensors | `backend/energy/` |
-| **Fiat Bridge** | Anti-extractive cFIAT token (ERC-20) backed 1:1 by cooperative bank deposits | `contracts/src/finance/CoopFiatToken.sol` |
-| **Federation / Diplomacy** | Cross-cooperative trust scoring, foreign reputation, and inter-coop escrow | `backend/federation/`, `backend/diplomacy/` |
-| **Stewardship** | Liquid delegation, Impact Scores, and stewardship council management | `backend/governance/`, `contracts/src/governance/StewardshipLedger.sol` |
+The Clerk is every member's personal assistant inside Loomio. It appears as a chat widget in the bottom-right corner.
+
+**What it does:**
+- Answers questions about the cooperative (finances, decisions, rules)
+- Helps draft proposals -- guides members to the right decision process (Advice, Consent, Consensus)
+- Drafts and revises documents based on member input, saves to Nextcloud
+- Incorporates feedback from multiple members into document revisions
+- Summarises long discussion threads in plain language
+- Tracks action items as Loomio tasks with due dates
+- Reminds members about pending votes via @mentions
+- Guides members through ICA values self-reflection
+- DMs members via Loomio Direct Discussions to help expand ideas into full proposals
+
+**What it never does:**
+- Vote or express opinions
+- Advocate for any position
+- Withhold information from any member
+- Finalise a document without member approval
+
+Every Clerk action is logged in the Glass Box -- any member can ask "What have you been doing?" and get a full audit trail.
 
 ---
 
-## Monorepo Structure
+## ICA Cooperative Principles
+
+Every aspect of Iskander is designed around the seven cooperative principles:
+
+| # | Principle | How Iskander Implements It |
+|---|-----------|--------------------------|
+| 1 | Voluntary and Open Membership | SSO onboarding, Clerk-guided welcome sequence, membership lifecycle |
+| 2 | Democratic Member Control | Loomio voting (Consent, Consensus, STV elections), 1-member-1-vote via BrightID + MACI ZK proofs |
+| 3 | Member Economic Participation | Treasury monitoring, member shares, surplus distribution, asset-lock enforcement |
+| 4 | Autonomy and Independence | Fully self-hosted, no cloud dependencies, cooperative owns all infrastructure |
+| 5 | Education, Training, Information | Clerk-guided onboarding, values reflection, proactive governance training |
+| 6 | Cooperation among Cooperatives | MCP-based federation, Liaison agent, cooperative discovery protocol |
+| 7 | Concern for Community | SDG tracking, sustainability reporting, energy-aware scheduling |
+
+---
+
+## Repository Structure
 
 ```
 iskander/
-+-- README.md                          # This file
-+-- ISKANDER_IMPLEMENTATION_SPEC.md    # Full machine-readable specification
-+-- ISKANDER_HARDENING_PLAN.md         # Security hardening roadmap
-+-- docs/                              # Design specs and working documents
-+-- tests/                             # Integration / cross-cutting tests
++-- README.md
++-- docs/
+|   +-- ROADMAP.md                  # Phased project roadmap
+|   +-- OVERVIEW.md                 # Non-technical overview for members
+|   +-- PLAN.md                     # Detailed technical plan (Route C -> B)
+|   +-- archive/                    # Archived design specs (.odt, .txt)
++-- skills/                         # Claude Code skill plugins (11 skills)
++-- loomio-wiki-complete.json       # Full Loomio feature documentation
 +-- src/
-    +-- IskanderOS/                    # Software (AGPL-3.0-only)
-    |   +-- backend/
-    |   |   +-- agents/                # LangGraph StateGraph agents
-    |   |   |   +-- genesis/           # Genesis boot sequence nodes
-    |   |   |   +-- core/              # Agent base classes, queue, registry
-    |   |   |   +-- library/           # Shared agent utilities
-    |   |   |   +-- research/          # RITL and curator agents
-    |   |   |   +-- spawner/           # Cooperative spawner agent
-    |   |   +-- routers/               # 27+ FastAPI route modules
-    |   |   +-- core/                  # PolicyEngine, Glass Box, config
-    |   |   +-- governance/            # Governance models and logic
-    |   |   +-- federation/            # Inter-cooperative federation
-    |   |   +-- diplomacy/             # Cross-federation diplomacy
-    |   |   +-- energy/                # Energy-aware scheduling
-    |   |   +-- mesh/                  # IPFS mesh archive
-    |   |   +-- finance/               # Treasury, credits, fiat bridge
-    |   |   +-- auth/                  # SIWE + JWT authentication
-    |   |   +-- schemas/               # Pydantic v2 models
-    |   |   +-- main.py                # FastAPI application entry point
-    |   |   +-- requirements.txt
-    |   +-- contracts/                 # Solidity 0.8.24 (Foundry)
-    |   |   +-- src/                   # Contract sources
-    |   |   |   +-- CoopIdentity.sol   # ERC-4973 Soulbound Token
-    |   |   |   +-- Constitution.sol   # Immutable genesis anchor
-    |   |   |   +-- InternalPayroll.sol# Mondragon 6:1 pay ratio cap
-    |   |   |   +-- IskanderEscrow.sol # Inter-coop escrow + disputes
-    |   |   |   +-- ArbitrationRegistry.sol
-    |   |   |   +-- governance/        # MACIVoting, StewardshipLedger, etc.
-    |   |   |   +-- finance/           # CoopFiatToken (ERC-20)
-    |   |   +-- test/                  # Foundry tests
-    |   |   +-- script/                # Deployment scripts
-    |   +-- frontend-next/             # Next.js 14 + Wagmi frontend
-    |   +-- infra/                     # Docker Compose, Dendrite config, SQL
-    |   +-- os_build/                  # Ubuntu 24.04 custom ISO build
-    |   +-- tests/                     # Backend test suite
-    +-- IskanderHearth/                # Open hardware (CERN-OHL-S v2)
-        +-- boms/                      # Bills of Materials (3 tiers)
-        +-- enclosures/                # OpenSCAD parametric chassis
-        +-- pcb/                       # Solidarity Hat PCB designs
-        +-- firmware/                  # Hardware controller firmware
-        +-- thermal/                   # Thermal and acoustic test data
-        +-- manufacturing/             # Production documentation
-        +-- supply_chain/              # Material Passports, ethics guidelines
-        +-- assembly_guides/           # Build and OS flashing instructions
+    +-- IskanderOS/
+    |   +-- openclaw/               # AI agent system
+    |   |   +-- openclaw.json       # OpenClaw configuration
+    |   |   +-- agents/
+    |   |   |   +-- orchestrator/   # Agent coordinator
+    |   |   |   +-- clerk/          # Member-facing assistant
+    |   |   |   +-- steward/        # Treasury monitor
+    |   |   +-- skills/
+    |   |       +-- loomio-bridge/  # Loomio API integration
+    |   |       +-- document-collab/# AI-assisted document drafting
+    |   |       +-- values-reflection/
+    |   |       +-- glass-box/      # Audit trail
+    |   |       +-- treasury-monitor/
+    |   |       +-- membership/     # Join/leave/onboard
+    |   +-- services/
+    |   |   +-- authentik/          # SSO identity provider
+    |   |   +-- loomio/             # Decision platform + chat widget
+    |   |   +-- nextcloud/          # Files, calendar, email
+    |   |   +-- decision-recorder/  # Webhook service (FastAPI)
+    |   |   +-- website/            # Public cooperative website
+    |   +-- infra/
+    |   |   +-- decision_log.sql    # Database schema
+    |   |   +-- traefik/            # Reverse proxy + TLS + security
+    |   +-- contracts/              # Solidity smart contracts
+    |   |   +-- src/
+    |   |       +-- Constitution.sol
+    |   |       +-- CoopIdentity.sol    # ERC-4973 Soulbound Tokens
+    |   |       +-- governance/
+    |   |           +-- MACIVoting.sol  # ZK secret ballot voting
+    |   +-- scripts/
+    |   |   +-- first-boot.py       # Interactive setup wizard
+    |   +-- docs/                   # ICA reference documents
+    |   +-- legacy/                 # Archived: previous backend, frontend, agents
+    +-- IskanderHearth/             # Open hardware (CERN-OHL-S v2)
 ```
-
----
-
-## Tech Stack
-
-| Layer | Technology | Notes |
-|---|---|---|
-| **Language** | Python 3.12 | Backend and agents |
-| **Web Framework** | FastAPI | Async, 27+ routers |
-| **Agent Framework** | LangGraph | StateGraph-based, 13+ agent graphs |
-| **Data Validation** | Pydantic v2 | Schemas and config |
-| **Smart Contracts** | Solidity 0.8.24, Foundry | 10 contracts |
-| **Blockchain** | Gnosis Chain | Low-cost, EVM-compatible |
-| **Database** | PostgreSQL + pgvector | 30+ tables, RAG vector search |
-| **Distributed Storage** | IPFS | Content-addressed mesh archive |
-| **Frontend** | Next.js 14 + Wagmi | Wallet-connected UI |
-| **Messaging** | Matrix (Dendrite) | Federated cooperative chat |
-| **Auth** | SIWE + JWT | Sign-In with Ethereum |
-| **Local LLM** | Ollama | On-node inference |
-| **Caching** | Redis | Session and task queue |
-| **Containerisation** | Docker Compose | 8 services |
-| **OS Image** | Ubuntu 24.04 | Custom ISO for Hearth hardware |
-| **Hardware License** | CERN-OHL-S v2 | Strongly reciprocal open hardware |
 
 ---
 
@@ -155,148 +164,69 @@ iskander/
 ### Prerequisites
 
 - Docker and Docker Compose
-- Python 3.12+ (for local development)
-- Node.js 18+ (for frontend)
-- Foundry (`forge`, `cast`, `anvil`) for smart contract development
+- 8GB+ RAM
+- Ubuntu 24.04 (recommended) or any Linux with Docker
 
-### Quick Start
-
-```bash
-# Clone the repository
-git clone https://github.com/iskander-os/iskander.git
-cd iskander/src/IskanderOS
-
-# Copy environment template and configure
-cp .env.example .env
-# Edit .env with your settings (database credentials, RPC URL, etc.)
-
-# Start all services
-docker compose up -d
-
-# The API will be available at http://localhost:8000
-# The frontend at http://localhost:3000
-```
-
-### Smart Contract Development
+### First Boot
 
 ```bash
-cd src/IskanderOS/contracts
+git clone https://github.com/Argocyte/Iskander.git
+cd Iskander/src/IskanderOS
 
-# Build contracts
-forge build
-
-# Run tests
-forge test
-
-# Deploy to local Anvil node (started by Docker Compose)
-forge script script/Deploy.s.sol --rpc-url http://localhost:8545 --broadcast
+python3 scripts/first-boot.py
 ```
 
-### Backend Development
+The wizard will ask for:
+1. Your cooperative's name
+2. Founding members (name + email)
+3. Optional: your domain name
 
-```bash
-cd src/IskanderOS/backend
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Run the FastAPI server
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-```
+Then it starts all services, configures SSO, creates accounts, and opens your browser. Your cooperative is ready.
 
 ---
 
-## Governance Model
+## Development Status
 
-Iskander's governance system is grounded in the **ICA Cooperative Principles** -- the seven internationally recognised principles defined by the International Co-operative Alliance:
+Iskander is in active development following the **Route C to B** plan:
 
-| # | ICA Cooperative Principle | Iskander Implementation |
-|---|---|---|
-| 1 | **Voluntary and Open Membership** | Open registration via SIWE; BrightID sybil resistance; no gatekeeping beyond identity verification |
-| 2 | **Democratic Member Control** | One-member-one-vote via MACIVoting (ZK-SNARK privacy); consent-based decision-making; liquid delegation via StewardshipLedger |
-| 3 | **Member Economic Participation** | InternalPayroll enforces Mondragon-inspired 6:1 pay ratio cap; cooperative surplus distribution |
-| 4 | **Autonomy and Independence** | Sovereign node architecture; no cloud dependency; self-hosted infrastructure on Hearth hardware |
-| 5 | **Education, Training, and Information** | Knowledge Commons (IKC); Glass Box Protocol ensures all decisions are explainable |
-| 6 | **Cooperation among Cooperatives** | Federation protocol; ForeignReputation cross-trust scoring; inter-coop escrow and arbitration |
-| 7 | **Concern for Community** | Energy-aware scheduling; Material Passports for hardware; regulatory floor enforcement |
+- **Phase C (Weeks 1-3)**: Radical MVP -- Loomio + Clerk + Nextcloud + SSO + Glass Box + Treasury
+- **Phase B (Weeks 4-8)**: Expansion -- blockchain, ZK voting, governance, community impact, email, website, federation
 
-The **ICA Cooperative Values** -- self-help, self-responsibility, democracy, equality, equity, and solidarity -- are encoded as invariants in the PolicyEngine, which acts as an immutable compliance gate that no agent or user can bypass.
-
-### Three-Tier Governance
-
-Iskander enforces a strict governance hierarchy:
-
-1. **Constitutional Core** -- The ICA Cooperative Principles and values. Immutable. Hardcoded in the PolicyEngine and anchored on-chain via the Constitution contract. Cannot be amended by any vote or agent action.
-
-2. **Genesis Layer** -- Founding decisions made during the boot sequence: cooperative name, jurisdiction, founding members, initial roles, and governance parameters. Stored as on-chain CID hashes. Amendable only by supermajority constitutional amendment process.
-
-3. **Operational Policy** -- Day-to-day rules, budgets, role assignments, and working agreements. Managed via the Governance Orchestrator agent. Amendable by standard consent process.
-
-### Decision-Making
-
-Governance draws on **Sociocracy 3.0** (S3) patterns and **Radical Routes** consensus practices:
-
-- **Consent decision-making**: proposals pass unless there is a reasoned, paramount objection
-- **Circle structure**: nested domains with clear authority boundaries
-- **Liquid delegation**: members can delegate their vote to trusted stewards via the StewardshipLedger, revocable at any time
-- **HITL breakpoints**: the genesis boot sequence and governance orchestrator include mandatory human-in-the-loop checkpoints for high-impact decisions
+See [docs/ROADMAP.md](docs/ROADMAP.md) for the full phased roadmap.
 
 ---
 
-## Architecture Status
+## Security
 
-### Implemented
+Iskander is designed for deployment on the open internet:
 
-- 10 Solidity smart contracts with Foundry test suite
-- 27+ FastAPI routers covering all major subsystems
-- 13+ LangGraph StateGraph agents (governance, genesis, steward, secretary, treasurer, procurement, ICA vetter, IPD auditor, persona generator, curator network, RITL manager, model manager)
-- Genesis boot sequence with 18 nodes, 3 HITL breakpoints, solo + cooperative paths
-- PolicyEngine with ICA compliance gating
-- Glass Box Protocol transparency layer
-- AsyncAgentQueue for serialised LLM/graph execution
-- Three-tier governance model (Constitutional / Genesis / Operational)
-- Regulatory floor enforcement with jurisdiction templates (UNIVERSAL, GB, ES)
-- Iskander Hearth hardware specifications (3 tiers, BOMs, enclosures, PCB designs)
-- Docker Compose infrastructure (8 services)
-- Database schema (30+ tables, PostgreSQL + pgvector)
+- TLS everywhere (Let's Encrypt via Traefik)
+- Security headers (STS, CSP, X-Frame-Options)
+- Internal-only networking for databases
+- Non-root containers with dropped capabilities
+- Rate limiting and CrowdSec threat intelligence
+- Optional Cloudflare integration for DDoS protection
 
-### Stubbed or In Progress
-
-- Frontend (Next.js 14 + Wagmi) -- scaffolded, not feature-complete
-- Ubuntu 24.04 custom ISO build -- scripts present, not fully automated
-- Matrix/Dendrite integration -- configuration present, agent integration partial
-- BrightID sybil resistance -- router exists, verification flow stubbed
-- Fiat bridge banking integration -- contract complete, bank API connector stubbed
-- IPFS mesh archive -- data model complete, cross-node replication logic partial
-- Cross-federation diplomacy -- models defined, protocol handshake in progress
-
-### Known Gaps and Priorities
-
-- End-to-end integration tests across the full genesis-to-operational lifecycle
-- Production hardening (see `ISKANDER_HARDENING_PLAN.md`)
-- Smart contract formal verification and audit
-- Accessibility audit for frontend
-- Additional jurisdiction templates beyond UNIVERSAL, GB, ES
-- Hardware thermal validation under sustained GPU inference load
+See the [Security Hardening](docs/PLAN.md#security-hardening-production-on-the-open-web) section of the plan for full details.
 
 ---
 
 ## License
 
 | Component | License |
-|---|---|
-| **IskanderOS** (all software, contracts, backend, frontend) | [AGPL-3.0-only](https://www.gnu.org/licenses/agpl-3.0) |
-| **IskanderHearth** (hardware designs, BOMs, enclosures, PCBs) | [CERN-OHL-S v2](https://ohwr.org/cern_ohl_s_v2.txt) |
+|-----------|---------|
+| **IskanderOS** (software, contracts) | [AGPL-3.0-only](https://www.gnu.org/licenses/agpl-3.0) |
+| **IskanderHearth** (hardware) | [CERN-OHL-S v2](https://ohwr.org/cern_ohl_s_v2.txt) |
 
-The AGPL-3.0 ensures that any deployment of Iskander must share its source code, preventing proprietary forks from extracting cooperative value. The CERN-OHL-S v2 applies the same reciprocal principle to hardware: any derivative designs must remain open.
+The AGPL-3.0 ensures that any deployment must share its source code, preventing proprietary forks from extracting cooperative value.
 
 ---
 
 ## References
 
-- [Implementation Specification](./ISKANDER_IMPLEMENTATION_SPEC.md) -- Full machine-readable architecture spec with contract ABIs, database schemas, API surface, and cross-cutting invariants
-- [Hardening Plan](./ISKANDER_HARDENING_PLAN.md) -- Security audit roadmap and production readiness checklist
-- [Iskander Hearth README](./src/IskanderHearth/README.md) -- Open hardware companion: tiers, BOMs, assembly guides, and material passports
-- [ICA Cooperative Principles](https://www.ica.coop/en/cooperatives/cooperative-identity) -- International Co-operative Alliance statement on cooperative identity
-- [Sociocracy 3.0 Practical Guide](https://sociocracy30.org) -- Governance patterns used in Iskander's decision-making model
-- [Radical Routes](https://www.radicalroutes.org.uk) -- Consensus practices informing cooperative governance design
+- [ICA Cooperative Identity](https://www.ica.coop/en/cooperatives/cooperative-identity) -- Definition, values, and principles
+- [ICA Guidance Notes](src/IskanderOS/docs/ica-guidance-notes-index.md) -- Detailed interpretation of principles (project-local)
+- [Co-ops for 2030](src/IskanderOS/docs/coops-for-2030-report.md) -- Cooperatives and UN SDGs (project-local)
+- [Sociocracy 3.0](https://sociocracy30.org) -- Governance patterns
+- [Loomio](https://www.loomio.com) -- Decision-making platform
+- [OpenClaw](https://openclaw.dev) -- AI agent orchestrator
