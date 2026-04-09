@@ -1,66 +1,94 @@
-# [Circle Name] — Charter
+# Circle Charter Template
 
-*Template. Replace bracketed text. Delete instructions in italics.*
+<!-- S3 Pattern: Circle | Referenced by: docs/sociocracy-integration.md -->
+<!-- contributor: 7b3f9e2a-14c8-4d6a-8f05-c2e1a3d90b47 | docs/templates/governance/ -->
 
----
-
-## Purpose
-
-*One sentence: what does this circle exist to achieve?*
-
-> Example: "To ensure the cooperative has the financial information it needs to govern itself well."
-
-## Domain
-
-*What decisions does this circle have authority to make without consulting the full cooperative?
-Be specific — vague domains lead to turf disputes.*
-
-**This circle may decide:**
-- [e.g. day-to-day purchases under £500]
-- [e.g. engagement of contractors for work within agreed scope]
-- [e.g. content and format of financial reports to the cooperative]
-
-**This circle must bring to the full cooperative:**
-- [e.g. purchases over £500]
-- [e.g. changes to financial policy]
-- [e.g. any matter affecting member equity or distributions]
-
-## Accountabilities
-
-*What is this circle responsible for delivering or maintaining? These are ongoing obligations, not one-off tasks.*
-
-- [ ] [e.g. Monthly financial statements available to all members by the 10th of each month]
-- [ ] [e.g. Annual accounts prepared and submitted on time]
-- [ ] [e.g. All cooperative accounts reconciled weekly]
-
-## Members
-
-| Name | Role | Since |
-|------|------|-------|
-| [Name] | Circle Lead | [date] |
-| [Name] | Delegate to [parent circle] | [date] |
-| [Name] | Member | [date] |
-
-*Minimum: one Circle Lead. Double-linking to parent circle recommended (one rep each direction).*
-
-## Delegated Authority
-
-- **Spending**: up to [£X] per transaction without full cooperative approval
-- **Contracting**: [describe scope — e.g. "up to 30 days of contractor time within the agreed annual budget"]
-- **Policy**: may set internal working practices within this circle's domain
-
-## Review Dates
-
-- **Charter review**: [date — recommend annually or when membership changes significantly]
-- **Domain review**: [date — when the cooperative's work changes, domains may need adjusting]
-
-## Meeting Rhythm
-
-- **Regular meetings**: [frequency, e.g. fortnightly, first Tuesday of the month]
-- **Quorum**: [e.g. 3 of 5 members, or "all members must consent to proceed"]
-- **Decision method**: [e.g. S3 consent, consensus, advice process — be explicit]
+A circle charter defines a circle's purpose, domain, accountabilities, and membership.
+Complete one of these when forming a new circle or formalising an existing working group.
+The Clerk can help draft it — ask: *"Help me write a circle charter for [purpose]."*
 
 ---
 
-*This charter was agreed by consent on [date] and is stored in the cooperative's decision record.*
-*Next review: [date]*
+## [Circle Name] Circle Charter
+
+**Established:** [YYYY-MM-DD]
+**Review date:** [YYYY-MM-DD]
+**Parent circle:** [Full membership / another circle's name]
+**Loomio subgroup:** [URL or key]
+**Mattermost channel:** [#channel-name]
+
+---
+
+### Purpose
+
+*One or two sentences. Why does this circle exist? What would be lost if it didn't?*
+
+[The [Circle Name] circle exists to [purpose]. Without it, [what problem would persist or what need would go unmet].]
+
+---
+
+### Domain
+
+*What decisions and actions does this circle own? Be specific — clear domain boundaries prevent conflicts.*
+
+**This circle may decide and act on:**
+- [Decision type 1]
+- [Decision type 2]
+- [Action type — e.g. "spend up to £200 per month on [purpose] without full-membership approval"]
+
+**This circle does NOT own:**
+- [Boundary 1 — what requires escalation to parent circle or full membership]
+- [Boundary 2]
+
+*Domain clarity test: if two circles might both claim a decision, which domain does it clearly fall under? If unclear, it belongs to the parent circle until the boundary is defined.*
+
+---
+
+### Accountabilities
+
+*What is this circle responsible for? Accountabilities are ongoing — not one-off tasks.*
+
+- [ ] [Ongoing responsibility 1 — e.g. "Prepare monthly financial summary for governance channel"]
+- [ ] [Ongoing responsibility 2]
+- [ ] [Ongoing responsibility 3]
+
+---
+
+### Members
+
+| Role | Member | From | Notes |
+|------|--------|------|-------|
+| Delegate (to parent circle) | [Name] | [YYYY-MM-DD] | Double-link representative |
+| Representative (from parent) | [Name] | [YYYY-MM-DD] | Double-link representative |
+| [Role name] | [Name] | [YYYY-MM-DD] | [Selected via ranked-choice / appointed] |
+| Member | [Name] | [YYYY-MM-DD] | |
+
+*S3 principle: circles are linked through double-linking — one delegate flows information up to the parent circle, one representative flows information down. Both have full consent rights in both circles.*
+
+---
+
+### Governance rhythm
+
+**Circle meetings:** [Frequency, format — e.g. "Monthly, 60 minutes, Mattermost async + quarterly video call"]
+**Decision method:** [Consent / Consensus / Delegated to role holder for routine items]
+**Governance backlog:** [Link to Loomio tag or Mattermost pinned post for open tensions]
+**Reporting to parent:** [How and when does this circle report outcomes to the full membership?]
+
+---
+
+### Charter review
+
+At the review date, the circle asks:
+
+1. Is the purpose still accurate?
+2. Are the domain boundaries working, or are there unresolved conflicts with other circles?
+3. Are the accountabilities being met? If not, why?
+4. Do the membership and roles reflect who is actually doing the work?
+5. Should this circle merge, split, or dissolve?
+
+Changes to the charter require a consent decision in Loomio, visible to the full membership.
+
+---
+
+*Template source: `docs/templates/governance/circle-charter.md`*
+*Related: `docs/sociocracy-integration.md` Section 5 (Circles)*

@@ -1,58 +1,79 @@
-# Consent Proposal — Template
+# Consent Proposal Template
 
-*Consent is not consensus. A proposal passes when no member has a **paramount objection** — a reasoned argument that the proposal would cause harm or move the cooperative backwards.*
+<!-- S3 Pattern: Consent Decision-Making | Referenced by: Clerk SOUL.md -->
+<!-- contributor: 7b3f9e2a-14c8-4d6a-8f05-c2e1a3d90b47 | docs/templates/governance/ -->
 
-*"I don't like it" is not a paramount objection. "This would violate our legal obligations" is.*
-
----
-
-## Driver
-
-*Paste the driver statement here. The proposal should directly address the need in the driver.*
-
-> In the context of [situation], [actor] needs [need] in order to [consequence].
-
-## Proposal
-
-*What specifically are you proposing? Be concrete. Vague proposals produce vague consent.*
-
-[Write the proposal text here.]
-
-### What this changes
-
-- [Bullet: what will be different after this proposal passes]
-- [Bullet: what won't change]
-
-### What this does not address
-
-*Acknowledge scope limits — it helps prevent scope creep in the discussion.*
-
-- [e.g. This proposal does not address [related issue] — that will need a separate driver and proposal]
-
-## Duration and review
-
-- **This agreement takes effect**: [immediately / on date / when condition is met]
-- **Review date**: [date — required; agreements without review dates become zombie policies]
-- **Review circle**: [who is responsible for initiating the review]
-
-## Sense check questions
-
-*Before formal consent, it helps to ask: "Does anyone have a concern that would prevent them from giving consent — even if this isn't their preferred option?"*
-
-*Common objections to check for:*
-- Does this violate any legal or regulatory obligation?
-- Does this conflict with an existing agreement?
-- Does this harm any member or stakeholder?
-- Would this move the cooperative backwards from its purpose?
+Use this template when bringing a driver to a formal consent decision in Loomio.
+The Clerk can help you fill it out — ask: *"Help me draft a consent proposal for [situation]."*
 
 ---
 
-## For the Clerk
+## [Proposal Title]
 
-When drafting this proposal, the Clerk will:
-1. Ask for the driver first — what situation and need is this addressing?
-2. Draft the proposal text
-3. Return the draft for your review before anything is posted to Loomio
-4. Suggest a review date if none is provided
+**Circle / Group:** [Which circle or the full membership]
+**Proposed by:** [Member name or role]
+**Date:** [YYYY-MM-DD]
+**Review date:** [YYYY-MM-DD — all agreements need a review date]
 
-The Clerk never submits a proposal — you do. The Clerk is the scribe, not the author.
+---
+
+### Driver
+
+*Why does this proposal need to exist? Use the S3 driver format.*
+
+> In the context of **[current situation]**, **[affected actor]** needs **[what is needed]** in order to **[consequence or benefit]**.
+
+**Example:**
+> In the context of our weekly governance meetings running over two hours, the facilitation circle needs a structured agenda format in order to ensure all items get adequate time and members can attend reliably.
+
+---
+
+### Proposal
+
+*State clearly what you are proposing. Be specific. Ambiguous proposals produce ambiguous agreements.*
+
+[What will be different if this proposal passes? Describe the agreement, policy, role, or action being decided.]
+
+---
+
+### What this proposal does not cover
+
+*Optional but useful for proposals that might seem broader than they are.*
+
+[List any related areas this proposal deliberately leaves unchanged, to prevent scope creep in the consent round.]
+
+---
+
+### Rationale
+
+*Brief explanation of why this approach was chosen. Not a justification — a context-setter.*
+
+[What alternatives were considered? Why is this the simplest effective response to the driver?]
+
+---
+
+### Review date and criteria
+
+**Review date:** [YYYY-MM-DD]
+**Who reviews:** [Circle name or role]
+**Review question:** [What will we ask ourselves at review time to evaluate whether this agreement is working?]
+
+*S3 principle: every agreement has a review date. Without one, agreements become zombie policies that nobody re-examines.*
+
+---
+
+### Consent round
+
+In Loomio, use proposal type: **Consent**
+
+Members vote:
+- **Agree** — I consent (no paramount objection)
+- **Abstain** — I have no strong view
+- **Block** — I have a paramount objection (see below)
+
+**A paramount objection** must be: reasoned (not just dislike), based on harm to the cooperative or community, and specific to this proposal. Blocks are worked through, not overridden.
+
+---
+
+*Template source: `docs/templates/governance/consent-proposal.md`*
+*Related: `docs/sociocracy-integration.md` Section 5 (Consent Decision-Making)*

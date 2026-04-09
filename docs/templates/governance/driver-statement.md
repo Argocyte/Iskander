@@ -1,60 +1,106 @@
-# Driver Statement Template
+# Driver Statement Format Guide
 
-A driver statement describes a situation and why the cooperative needs to respond to it.
-Clear driver statements make better proposals — they separate the *problem* from the *solution*
-and help members focus on what actually needs to change.
+<!-- S3 Pattern: Navigate Via Tension | Referenced by: Clerk SOUL.md (draft_driver_statement tool) -->
+<!-- contributor: 7b3f9e2a-14c8-4d6a-8f05-c2e1a3d90b47 | docs/templates/governance/ -->
 
----
-
-## Format
-
-> "In the context of **[situation]**, **[actor/s]** need/s **[need]** in order to **[consequence — what becomes possible, or what harm is avoided]**."
-
-### Elements
-
-| Element | What it means | Common mistakes |
-|---------|--------------|-----------------|
-| **Situation** | The current state of affairs — what is actually happening now | Being too abstract ("our governance is bad"); being too narrow (one incident) |
-| **Actor** | Who experiences the need — a role, circle, or the cooperative as a whole | Naming an individual instead of a role; leaving it vague |
-| **Need** | What capability or condition is missing | Jumping straight to a solution ("we need a new policy") instead of the underlying need |
-| **Consequence** | Why this matters — what good becomes possible, or what harm is avoided | Leaving this out, which makes the driver hard to prioritise |
+A driver statement is the foundation of S3 governance. It names the gap between current reality
+and what is needed — without jumping to a solution. When you give the Clerk a tension to
+log, it will help you shape it into this format.
 
 ---
 
-## Examples
+## The Format
 
-**Weak (solution-shaped):**
-> "We need to implement a new onboarding checklist."
+> **"In the context of [situation], [actor] needs [need] in order to [consequence]."**
 
-**Strong (driver-shaped):**
-> "In the context of three new members joining in the last month, new members need a clear understanding of cooperative norms and governance processes in order to participate confidently without relying on established members to informally brief them each time."
+All four parts are required. A driver missing any part is not yet complete.
 
 ---
 
-**Weak (too vague):**
-> "Our finances aren't transparent enough."
+## The Four Parts
 
-**Strong:**
-> "In the context of the cooperative making its first significant investment decision, members need timely, accessible financial information in order to give informed consent to major spending proposals."
+### 1. Situation — *what is currently true*
 
----
+Describe observable reality, not your interpretation of it. Avoid blame, diagnosis, or proposed solutions.
 
-## Using with the Clerk
-
-You can ask the Clerk: *"Help me write a driver statement for [situation]."*
-
-The Clerk will ask:
-1. What is happening right now? (situation)
-2. Who experiences this as a need — a role, a circle, all members? (actor)
-3. What specifically is missing or needed?
-4. What becomes possible when this need is met, or what harm is avoided?
-
-Then it will draft a statement for you to review before it goes into a discussion or proposal.
+| Weak (interpretation) | Strong (observable) |
+|----------------------|---------------------|
+| "People don't care about meetings" | "Quorum has not been reached in 3 of the last 5 governance votes" |
+| "Our finances are a mess" | "The monthly financial summary has not been produced in 4 months" |
+| "Nobody uses Loomio properly" | "12 of 23 members have not participated in any proposal in the last 90 days" |
 
 ---
 
-## Related patterns
+### 2. Actor — *who experiences this as a need*
 
-- A driver statement is the starting point for a **proposal** (what the cooperative decides to do about the need)
-- A driver statement describes a **tension** — the gap between what is and what could be
-- Strong drivers make better **agenda items** — "discuss the driver for [situation]" is more productive than "discuss [topic]"
+Name the role, circle, or group that holds this need. Not a person — a role or the cooperative as a whole.
+
+| Too specific | Right level |
+|-------------|-------------|
+| "I need..." | "The facilitation circle needs..." |
+| "Alex needs..." | "New members need..." |
+| "The founders need..." | "The cooperative needs..." |
+
+---
+
+### 3. Need — *what is specifically missing*
+
+Name what is absent, not what you want to happen. A need is not a solution.
+
+| Solution (not a need) | Need |
+|----------------------|------|
+| "We need a new policy" | "We need clear criteria for decision scope" |
+| "We need to fire the treasurer" | "We need reliable monthly financial reporting" |
+| "We need more meetings" | "We need a regular space for unresolved tensions to surface" |
+
+---
+
+### 4. Consequence — *why it matters*
+
+What becomes possible if the need is met? Or what harm is avoided? This is the "in order to" clause.
+
+| Vague | Specific |
+|-------|---------|
+| "...in order to improve things" | "...in order to make informed decisions at the AGM" |
+| "...so it's better" | "...so new members can participate without needing to ask a senior member" |
+| "...because it's important" | "...so the cooperative can meet its legal obligation to file annual accounts" |
+
+---
+
+## Full Examples
+
+**Quorum erosion:**
+> In the context of quorum having been missed in 3 of the last 5 governance votes, the full membership needs a shared understanding of why members are not participating in order to address the root cause before participation erodes further.
+
+**Knowledge gap:**
+> In the context of new members joining without guidance on cooperative governance, new members need an accessible introduction to how decisions are made in this cooperative in order to participate confidently from their first month.
+
+**Financial transparency:**
+> In the context of the monthly financial summary not having been produced for 4 months, the full membership needs reliable aggregate financial reporting in order to make informed decisions about surplus allocation at the AGM.
+
+---
+
+## Logging a Driver with the Clerk
+
+Once you have a driver statement, the Clerk can log it to the decision-recorder:
+
+> *"Log this tension: [paste driver statement]"*
+
+The Clerk will confirm the text is right before logging. Once logged, the tension appears in the governance backlog and can be progressed to a consent proposal or delegated to a circle.
+
+---
+
+## Why Drivers Before Solutions
+
+S3 treats jumping to solutions as the root cause of most governance failures. When a proposal is put forward without a clear driver:
+- Members debate the solution rather than whether the need is real
+- The "winning" solution may not actually address the underlying need
+- The decision is harder to review later (what were we trying to solve?)
+
+A strong driver makes evaluation easy: "Did we meet the need stated in the driver?" is a concrete review question.
+
+---
+
+*Template source: `docs/templates/governance/driver-statement.md`*
+*Related: `docs/sociocracy-integration.md` Section 5 (Navigate Via Tension)*
+*Clerk tool: `draft_driver_statement` — helps articulate the four parts interactively*
