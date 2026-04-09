@@ -1,0 +1,13 @@
+{{/*
+Iskander namespace — all services live here.
+*/}}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
