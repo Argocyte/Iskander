@@ -1,0 +1,184 @@
+{{- if .Values.authentik.enabled }}
+# ---------------------------------------------------------------------------
+# Authentik bootstrap — pre-seeds OIDC applications for Loomio, Mattermost,
+# and Nextcloud via Authentik's blueprints API.
+# Runs as a post-install/post-upgrade Helm hook; idempotent.
+# ---------------------------------------------------------------------------
+
+---
+# ConfigMap containing the blueprint YAML applied on first boot
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: authentik-bootstrap-blueprint
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+data:
+  blueprint.yaml: |
+    version: 1
+    entries:
+      # -----------------------------------------------------------------------
+      # Loomio OIDC application
+      # -----------------------------------------------------------------------
+      - model: authentik_providers_oauth2.oauth2provider
+        identifiers:
+          name: Loomio
+        attrs:
+          name: Loomio
+          client_type: confidential
+          client_id: loomio
+          redirect_uris: |
+            https://{{ .Values.global.cooperative.domain }}/auth/oidc/callback
+          sub_mode: hashed_user_id
+          include_claims_in_id_token: true
+          access_code_validity: minutes=1
+          access_token_validity: minutes=5
+          refresh_token_validity: days=30
+          signing_key: self-signed-certificate
+
+      - model: authentik_core.application
+        identifiers:
+          slug: loomio
+        attrs:
+          name: Loomio
+          slug: loomio
+          provider: !KeyOf Loomio
+          policy_engine_mode: any
+
+      # -----------------------------------------------------------------------
+      # Mattermost OIDC application
+      # -----------------------------------------------------------------------
+      - model: authentik_providers_oauth2.oauth2provider
+        identifiers:
+          name: Mattermost
+        attrs:
+          name: Mattermost
+          client_type: confidential
+          client_id: mattermost
+          redirect_uris: |
+            https://{{ .Values.global.cooperative.domain }}/signup/gitlab/complete
+            https://{{ .Values.global.cooperative.domain }}/login/gitlab/complete
+          sub_mode: hashed_user_id
+          include_claims_in_id_token: true
+          access_code_validity: minutes=1
+          access_token_validity: minutes=5
+          refresh_token_validity: days=30
+          signing_key: self-signed-certificate
+
+      - model: authentik_core.application
+        identifiers:
+          slug: mattermost
+        attrs:
+          name: Mattermost
+          slug: mattermost
+          provider: !KeyOf Mattermost
+          policy_engine_mode: any
+
+      # -----------------------------------------------------------------------
+      # Nextcloud OIDC application
+      # -----------------------------------------------------------------------
+      - model: authentik_providers_oauth2.oauth2provider
+        identifiers:
+          name: Nextcloud
+        attrs:
+          name: Nextcloud
+          client_type: confidential
+          client_id: nextcloud
+          redirect_uris: |
+            https://{{ .Values.global.cooperative.domain }}/apps/user_oidc/code
+          sub_mode: hashed_user_id
+          include_claims_in_id_token: true
+          access_code_validity: minutes=1
+          access_token_validity: minutes=5
+          refresh_token_validity: days=30
+          signing_key: self-signed-certificate
+
+      - model: authentik_core.application
+        identifiers:
+          slug: nextcloud
+        attrs:
+          name: Nextcloud
+          slug: nextcloud
+          provider: !KeyOf Nextcloud
+          policy_engine_mode: any
+
+---
+# Job — applies the blueprint after Authentik is ready
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: authentik-bootstrap
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 5
+  template:
+    metadata:
+      labels:
+        {{- include "iskander.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: authentik-bootstrap
+        iskander.coop/oidc-client: authentik
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: bootstrap
+          image: curlimages/curl:8.5.0
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+
+              # Wait for Authentik to be ready
+              echo "Waiting for Authentik..."
+              until curl -sf http://authentik:80/-/health/ready/ > /dev/null; do
+                sleep 5
+              done
+              echo "Authentik is ready."
+
+              # Apply blueprint via API
+              # The bootstrap token is created by Authentik automatically on first start
+              # and written to the server log. In production the install script captures it.
+              BLUEPRINT=$(cat /blueprints/blueprint.yaml)
+              curl -sf \
+                -X POST \
+                -H "Authorization: Bearer ${AUTHENTIK_BOOTSTRAP_TOKEN}" \
+                -H "Content-Type: application/yaml" \
+                --data-raw "${BLUEPRINT}" \
+                http://authentik:80/api/v3/managed/blueprints/
+
+              echo "Bootstrap complete."
+          env:
+            - name: AUTHENTIK_BOOTSTRAP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: authentik-secrets
+                  key: secret-key
+          volumeMounts:
+            - name: blueprints
+              mountPath: /blueprints
+      volumes:
+        - name: blueprints
+          configMap:
+            name: authentik-bootstrap-blueprint
+
+{{- end }}{{/* authentik.enabled */}}
