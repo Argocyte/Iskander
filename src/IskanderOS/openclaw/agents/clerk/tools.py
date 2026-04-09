@@ -404,6 +404,7 @@ def dr_log_tension(
 
 def dr_update_tension(
     *,
+    actor_user_id: str,
     tension_id: int,
     status: str | None = None,
     driver_statement: str | None = None,
@@ -412,8 +413,9 @@ def dr_update_tension(
     """
     Update a tension's status, driver statement, or linked discussion.
     Glass Box MUST be called before this function when changing status.
+    Only the member who originally logged the tension may update it.
     """
-    payload: dict = {}
+    payload: dict = {"updated_by": actor_user_id}
     if status:
         payload["status"] = status
     if driver_statement is not None:
@@ -435,8 +437,18 @@ def dr_set_review_date(
     """
     Set a review date on a recorded agreement (S3: Evaluate and Evolve Agreements).
     Glass Box MUST be called before this function.
-    review_date must be ISO 8601 format: YYYY-MM-DD.
+    review_date must be ISO 8601 format: YYYY-MM-DD and must be in the future (#65).
     """
+    from datetime import date as _date
+    try:
+        review_dt = _date.fromisoformat(review_date)
+    except ValueError:
+        raise ValueError(f"review_date must be ISO 8601 format (YYYY-MM-DD), got: {review_date!r}")
+    if review_dt <= _date.today():
+        raise ValueError(
+            f"review_date must be in the future (got {review_date}, today is {_date.today()}). "
+            "Setting a past review date would hide the agreement from the review queue."
+        )
     payload: dict = {"review_date": review_date}
     if review_circle:
         payload["review_circle"] = review_circle
@@ -774,7 +786,6 @@ TOOL_DEFINITIONS = [
             "required": ["channel_id", "message"],
         },
     },
-<<<<<<< feature/meeting-prep-clerk
     # Meeting prep tools — read-only
     {
         "name": "list_recent_decisions",
@@ -808,7 +819,14 @@ TOOL_DEFINITIONS = [
             "Generate a draft meeting agenda from the Glass Box: "
             "agreements due for review, open tensions, and recent decisions. "
             "Returns a formatted Markdown document ready to share."
-=======
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "group_key": {"type": "string", "description": "Optional: filter decisions by Loomio group key"},
+            },
+        },
+    },
     {
         "name": "provision_member",
         "description": (
@@ -816,21 +834,15 @@ TOOL_DEFINITIONS = [
             "REQUIRES glass_box_log to be called first. "
             "REQUIRES explicit member confirmation before calling. "
             "Returns a password reset URL to share with the new member."
->>>>>>> main
         ),
         "input_schema": {
             "type": "object",
             "properties": {
-<<<<<<< feature/meeting-prep-clerk
-                "group_key": {"type": "string", "description": "Optional: filter decisions by Loomio group key"},
-            },
-=======
                 "username": {"type": "string", "description": "Lowercase username (letters, numbers, hyphens, underscores only)"},
                 "email": {"type": "string", "description": "New member's email address"},
                 "display_name": {"type": "string", "description": "Display name (optional, defaults to username)"},
             },
             "required": ["username", "email"],
->>>>>>> main
         },
     },
 ]

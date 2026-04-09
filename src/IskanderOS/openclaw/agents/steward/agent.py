@@ -77,37 +77,6 @@ def _response_tool_names(content: list[Any]) -> list[str]:
     return [b.name for b in content if getattr(b, "type", None) == "tool_use"]
 
 
-def _validate_response_ordering(content: list[Any]) -> str | None:
-    """
-    Enforce: glass_box_log must appear before steward_post_financial_digest
-    within the same response, or the write tool must be in its own response
-    following a prior glass_box_log response.
-
-    Returns None if valid, error string if not.
-    """
-    tool_blocks = [b for b in content if getattr(b, "type", None) == "tool_use"]
-    names = [b.name for b in tool_blocks]
-
-    write_tools_present = [n for n in names if n in _WRITE_TOOLS]
-    if not write_tools_present:
-        return None
-
-    if "glass_box_log" not in names:
-        return (
-            f"Write tool(s) {write_tools_present} called without glass_box_log. "
-            "Call glass_box_log first (in a prior round or earlier in this response)."
-        )
-
-    log_index = names.index("glass_box_log")
-    for wt in write_tools_present:
-        wt_index = names.index(wt)
-        if log_index >= wt_index:
-            return (
-                f"glass_box_log must appear BEFORE {wt}. "
-                "Reorder: log first, then post."
-            )
-
-    return None
 
 
 # ---------------------------------------------------------------------------
@@ -136,6 +105,10 @@ def run(*, user_id: str, username: str, message: str, channel_id: str) -> str:
         }
     ]
 
+    # Tracks whether glass_box_log completed successfully in a PRIOR tool-use round.
+    # Write tools are blocked until this is True. Reset to False after each write.
+    _glass_box_confirmed = False
+
     for _round in range(MAX_TOOL_ROUNDS):
         response = client.messages.create(
             model=MODEL,
@@ -154,10 +127,20 @@ def run(*, user_id: str, username: str, message: str, channel_id: str) -> str:
             logger.warning("Unexpected stop_reason: %s", response.stop_reason)
             return _extract_text(response.content)
 
-        ordering_error = _validate_response_ordering(response.content)
-        if ordering_error:
+        tool_names = _response_tool_names(response.content)
+        write_tools_present = [n for n in tool_names if n in _WRITE_TOOLS]
+
+        # Prior-round Glass Box enforcement — same pattern as the Clerk agent.
+        if write_tools_present and not _glass_box_confirmed:
+            rejection = (
+                f"Write tool(s) {write_tools_present} rejected: "
+                "glass_box_log must complete in a separate round BEFORE any write tool. "
+                "Call glass_box_log by itself, wait for it to succeed, then call the "
+                "write tool in the following round."
+            )
             logger.warning(
-                "Tool ordering violation | user=%s | %s", user_id, ordering_error
+                "Glass Box prior-round violation | user=%s | write_tools=%s",
+                user_id, write_tools_present,
             )
             tool_results = []
             for block in response.content:
@@ -167,11 +150,16 @@ def run(*, user_id: str, username: str, message: str, channel_id: str) -> str:
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": block.id,
-                        "content": json.dumps({"error": ordering_error}),
+                        "content": json.dumps({"error": rejection}),
                         "is_error": True,
                     })
                 else:
-                    tool_results.append(_execute_tool(block, user_id))
+                    result_dict = _execute_tool(block, user_id)
+                    tool_results.append(result_dict)
+                    if block.name == "glass_box_log":
+                        result_content = json.loads(result_dict.get("content", "{}"))
+                        if "error" not in result_content:
+                            _glass_box_confirmed = True
             messages.append({"role": "user", "content": tool_results})
             continue
 
@@ -180,7 +168,16 @@ def run(*, user_id: str, username: str, message: str, channel_id: str) -> str:
             if getattr(block, "type", None) != "tool_use":
                 continue
             logger.info("Steward tool call: %s | user=%s", block.name, user_id)
-            tool_results.append(_execute_tool(block, user_id))
+            result_dict = _execute_tool(block, user_id)
+            tool_results.append(result_dict)
+
+            if block.name == "glass_box_log":
+                result_content = json.loads(result_dict.get("content", "{}"))
+                if "error" not in result_content:
+                    _glass_box_confirmed = True
+
+            if block.name in _WRITE_TOOLS:
+                _glass_box_confirmed = False
 
         messages.append({"role": "user", "content": tool_results})
 
@@ -209,15 +206,29 @@ def _execute_tool(block: Any, user_id: str) -> dict:
     except Exception:
         logger.exception("Tool %s failed | user=%s", tool_name, user_id)
         result = {"error": "Tool execution failed. The error has been logged."}
+        # Log write failures so the audit trail records what was attempted.
+        if tool_name in _WRITE_TOOLS:
+            try:
+                from .tools import glass_box_log as _glass_box_log, GOVERNANCE_CHANNEL_ID
+                _glass_box_log(
+                    actor_user_id=user_id,
+                    action=f"failure:{tool_name}",
+                    target=GOVERNANCE_CHANNEL_ID,
+                    reasoning="Tool raised an exception — see server logs for details.",
+                )
+            except Exception:
+                logger.warning(
+                    "Glass Box failure log also failed | tool=%s | user=%s", tool_name, user_id
+                )
 
     # Log write outcomes to Glass Box so the audit trail is complete.
     if tool_name in _WRITE_TOOLS and "error" not in result:
         try:
-            from .tools import glass_box_log as _glass_box_log
+            from .tools import glass_box_log as _glass_box_log, GOVERNANCE_CHANNEL_ID
             _glass_box_log(
                 actor_user_id=user_id,
                 action=f"outcome:{tool_name}",
-                target=tool_input.get("channel_id", "governance-channel"),
+                target=GOVERNANCE_CHANNEL_ID,  # resolved channel ID, not a literal string
                 reasoning=json.dumps(result, default=str)[:500],
             )
         except Exception:

@@ -25,16 +25,18 @@ import sys
 
 def _reload_tools_with_env(extra_env: dict | None = None):
     """Re-import tools module to pick up env var changes."""
-    # Remove cached modules so env vars are re-read at module level
+    # Remove cached modules so env vars are re-read at module level.
+    # Match both "agents.clerk" (direct import) and "openclaw.agents.clerk"
+    # (fully-qualified import) so the cleanup works regardless of invocation path.
     for mod_name in list(sys.modules):
-        if "openclaw.agents.clerk" in mod_name:
+        if "agents.clerk" in mod_name:
             del sys.modules[mod_name]
 
     if extra_env:
         for k, v in extra_env.items():
             os.environ[k] = v
 
-    from src.IskanderOS.openclaw.agents.clerk import tools
+    from agents.clerk import tools
     return tools
 
 
@@ -115,10 +117,10 @@ def test_provision_member_with_service_token():
 def test_provision_member_in_write_tools():
     # Clear cached modules so we get fresh imports
     for mod_name in list(sys.modules):
-        if "openclaw.agents.clerk" in mod_name:
+        if "agents.clerk" in mod_name:
             del sys.modules[mod_name]
 
-    from src.IskanderOS.openclaw.agents.clerk import agent
+    from agents.clerk import agent
     assert "provision_member" in agent._WRITE_TOOLS
 
 
@@ -133,10 +135,10 @@ def test_provision_member_not_in_actor_injection():
     """
     # Clear cached modules
     for mod_name in list(sys.modules):
-        if "openclaw.agents.clerk" in mod_name:
+        if "agents.clerk" in mod_name:
             del sys.modules[mod_name]
 
-    from src.IskanderOS.openclaw.agents.clerk import agent
+    from agents.clerk import agent
 
     # Build a fake tool_use block
     block = SimpleNamespace(

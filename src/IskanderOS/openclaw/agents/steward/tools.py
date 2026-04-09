@@ -93,6 +93,7 @@ def steward_get_treasury_summary() -> dict[str, Any]:
         data = resp.json()
 
     last_updated = data.get("last_updated_at")
+    age_days = 0  # initialised before conditional — prevents NameError if last_updated is None
     stale = False
     if last_updated:
         age_days = (
@@ -265,6 +266,9 @@ def steward_format_digest() -> str:
 # Mattermost — write operation (Glass Box required before calling)
 # ---------------------------------------------------------------------------
 
+_MATTERMOST_POST_LIMIT = 16_383  # Mattermost API character limit per post
+
+
 def steward_post_financial_digest(
     *,
     actor_user_id: str,
@@ -274,6 +278,12 @@ def steward_post_financial_digest(
     Post a financial digest to the cooperative governance channel.
     Glass Box MUST be called before this function.
     """
+    if len(digest_text) > _MATTERMOST_POST_LIMIT:
+        raise ValueError(
+            f"Digest is too long ({len(digest_text)} chars) for a single Mattermost post "
+            f"(limit: {_MATTERMOST_POST_LIMIT}). Ask the treasurer to reduce the number of "
+            "accounts or compliance deadlines, or split the digest into sections."
+        )
     payload = {
         "channel_id": GOVERNANCE_CHANNEL_ID,
         "message": digest_text,
@@ -387,8 +397,9 @@ TOOL_DEFINITIONS: list[dict] = [
             "properties": {
                 "limit": {
                     "type": "integer",
-                    "description": "Number of recent transactions to return. Default 10.",
+                    "description": "Number of recent transactions to return. Default 10, max 50.",
                     "default": 10,
+                    "maximum": 50,
                 },
             },
             "required": [],
