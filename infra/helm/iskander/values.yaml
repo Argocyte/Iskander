@@ -304,6 +304,8 @@ decisionRecorder:
   logLevel: "INFO"
   postgresql:
     password: ""
+  # Optional: enable in Phase B when Headscale mesh is active (adds auth on top of NetworkPolicy)
+  internalServiceToken: ""
   resources:
     requests:
       memory: "64Mi"

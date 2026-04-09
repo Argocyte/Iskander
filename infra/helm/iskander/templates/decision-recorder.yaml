@@ -16,7 +16,10 @@ metadata:
 type: Opaque
 stringData:
   postgresql-password: {{ .Values.decisionRecorder.postgresql.password | quote }}
-  loomio-webhook-secret: {{ .Values.loomio.webhookSecret | default "" | quote }}
+  loomio-webhook-secret: {{ .Values.loomio.webhookSecret | quote }}
+  # Optional: set in Phase B when Headscale mesh connects multiple nodes.
+  # NetworkPolicy provides isolation in Phase C; this adds a second layer.
+  internal-service-token: {{ .Values.decisionRecorder.internalServiceToken | default "" | quote }}
 
 ---
 apiVersion: v1
@@ -77,6 +80,12 @@ spec:
                 secretKeyRef:
                   name: decision-recorder-secrets
                   key: loomio-webhook-secret
+            - name: INTERNAL_SERVICE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: decision-recorder-secrets
+                  key: internal-service-token
+                  optional: true
           ports:
             - name: http
               containerPort: 3000
