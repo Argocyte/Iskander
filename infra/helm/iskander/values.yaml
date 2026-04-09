@@ -105,6 +105,44 @@ networkPolicy:
 # ---------------------------------------------------------------------------
 authentik:
   enabled: false
+  image:
+    repository: ghcr.io/goauthentik/server
+    tag: "2024.12.1"         # pin; update intentionally
+  # MUST be overridden by install script — never set here in production
+  secretKey: ""
+  logLevel: info
+
+  postgresql:
+    password: ""             # populated by install script
+
+  email:
+    host: ""                 # leave blank to disable email (air-gapped installs)
+    port: 587
+    useTLS: true
+    from: ""                 # defaults to iskander@<domain>
+
+  server:
+    resources:
+      requests:
+        memory: "400Mi"
+        cpu: "100m"
+      limits:
+        memory: "700Mi"
+        cpu: "500m"
+
+  worker:
+    resources:
+      requests:
+        memory: "200Mi"
+        cpu: "50m"
+      limits:
+        memory: "400Mi"
+        cpu: "250m"
+
+  ingress:
+    enabled: true
+    tls: true
+    annotations: {}
 
 loomio:
   enabled: false
