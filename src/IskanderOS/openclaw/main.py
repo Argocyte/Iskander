@@ -15,6 +15,8 @@ import hashlib
 import hmac
 import logging
 import os
+import time
+from collections import defaultdict
 from typing import Annotated
 
 import httpx
@@ -34,7 +36,32 @@ app = FastAPI(
 )
 
 MATTERMOST_TOKEN = os.environ["MATTERMOST_OUTGOING_WEBHOOK_TOKEN"]
-BOT_USER_ID = os.environ.get("MATTERMOST_BOT_USER_ID", "")
+BOT_USER_ID = os.environ["MATTERMOST_BOT_USER_ID"]  # Required — prevents response loops
+
+# ---------------------------------------------------------------------------
+# Rate limiting — simple in-memory sliding window
+# Resets on restart; good enough for single-node cooperative deployments.
+# ---------------------------------------------------------------------------
+
+_RATE_LIMIT_WINDOW = 60  # seconds
+_RATE_LIMIT_MAX = int(os.environ.get("CLERK_RATE_LIMIT_PER_MINUTE", "20"))
+# user_id → list of timestamps within the window
+_rate_counters: dict[str, list[float]] = defaultdict(list)
+
+
+def _check_rate_limit(user_id: str) -> None:
+    """Raise HTTP 429 if the user has exceeded the per-minute request limit."""
+    now = time.monotonic()
+    window_start = now - _RATE_LIMIT_WINDOW
+    timestamps = _rate_counters[user_id]
+    # Drop timestamps outside the window
+    _rate_counters[user_id] = [t for t in timestamps if t > window_start]
+    if len(_rate_counters[user_id]) >= _RATE_LIMIT_MAX:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Rate limit exceeded. Please wait before sending another message.",
+        )
+    _rate_counters[user_id].append(now)
 
 
 # ---------------------------------------------------------------------------
@@ -83,6 +110,9 @@ async def mattermost_webhook(event: MattermostEvent) -> JSONResponse:
     if event.user_id == BOT_USER_ID:
         return JSONResponse(content={})
 
+    # Rate limit — checked after bot-loop guard so bot responses don't count
+    _check_rate_limit(event.user_id)
+
     # Strip trigger word from message
     message = event.text
     if event.trigger_word and message.startswith(event.trigger_word):
@@ -116,7 +146,8 @@ async def mattermost_webhook(event: MattermostEvent) -> JSONResponse:
 # Loomio decision webhook receiver (from decision-recorder or Loomio directly)
 # ---------------------------------------------------------------------------
 
-LOOMIO_WEBHOOK_SECRET = os.environ.get("LOOMIO_WEBHOOK_SECRET", "")
+# Required — do not accept unauthenticated Loomio webhooks
+LOOMIO_WEBHOOK_SECRET = os.environ["LOOMIO_WEBHOOK_SECRET"]
 MATTERMOST_GOVERNANCE_CHANNEL = os.environ.get("MATTERMOST_GOVERNANCE_CHANNEL_ID", "")
 MATTERMOST_BOT_TOKEN = os.environ.get("MATTERMOST_BOT_TOKEN", "")
 
@@ -128,20 +159,19 @@ async def loomio_decision_webhook(
 ) -> dict:
     """
     Receives a Loomio outcome webhook and posts a summary to #governance.
-    Verifies HMAC signature when LOOMIO_WEBHOOK_SECRET is set.
+    Verifies HMAC-SHA256 signature — always required.
     """
     body = await request.body()
 
-    if LOOMIO_WEBHOOK_SECRET:
-        if not x_loomio_signature:
-            raise HTTPException(status_code=403, detail="Missing signature")
-        expected = "sha256=" + hmac.new(
-            LOOMIO_WEBHOOK_SECRET.encode(),
-            body,
-            hashlib.sha256,
-        ).hexdigest()
-        if not hmac.compare_digest(x_loomio_signature, expected):
-            raise HTTPException(status_code=403, detail="Invalid signature")
+    if not x_loomio_signature:
+        raise HTTPException(status_code=403, detail="Missing signature")
+    expected = "sha256=" + hmac.new(
+        LOOMIO_WEBHOOK_SECRET.encode(),
+        body,
+        hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(x_loomio_signature, expected):
+        raise HTTPException(status_code=403, detail="Invalid signature")
 
     try:
         payload = await request.json()
