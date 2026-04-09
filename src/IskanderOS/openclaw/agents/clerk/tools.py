@@ -25,6 +25,7 @@ LOOMIO_API_KEY = os.environ["LOOMIO_API_KEY"]
 MATTERMOST_BASE = os.environ["MATTERMOST_URL"].rstrip("/")
 MATTERMOST_BOT_TOKEN = os.environ["MATTERMOST_BOT_TOKEN"]
 GLASS_BOX_BASE = os.environ.get("GLASS_BOX_URL", "http://decision-recorder:3000")
+DECISION_RECORDER_BASE = os.environ.get("DECISION_RECORDER_URL", GLASS_BOX_BASE)
 
 # Configurable timeout — cooperative networks may have higher latency
 _TIMEOUT = float(os.environ.get("CLERK_HTTP_TIMEOUT", "30"))
@@ -284,6 +285,130 @@ def mattermost_post_message(*, channel_id: str, message: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Decision Recorder — S3 governance tools (read operations: no Glass Box required)
+# ---------------------------------------------------------------------------
+
+def dr_list_due_reviews(days_ahead: int = 30) -> dict:
+    """List agreements whose review date falls within the next N days."""
+    with _http_client() as client:
+        resp = client.get(
+            f"{DECISION_RECORDER_BASE}/decisions/reviews/due",
+            params={"days_ahead": days_ahead},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+def dr_list_tensions(
+    status: str | None = None,
+    domain: str | None = None,
+    limit: int = 20,
+) -> dict:
+    """List logged organisational tensions."""
+    params: dict = {"limit": limit}
+    if status:
+        params["status"] = status
+    if domain:
+        params["domain"] = domain
+    with _http_client() as client:
+        resp = client.get(f"{DECISION_RECORDER_BASE}/tensions", params=params)
+        resp.raise_for_status()
+        return resp.json()
+
+
+def draft_driver_statement(
+    *,
+    situation: str,
+    actor: str,
+    need: str,
+    consequence: str,
+) -> str:
+    """
+    Format a well-structured S3 driver statement from four components.
+    Returns formatted text only — no external API call.
+    """
+    return (
+        f'**Driver statement**\n\n'
+        f'"In the context of **{situation}**, **{actor}** needs **{need}** '
+        f'in order to **{consequence}**."'
+    )
+
+
+# ---------------------------------------------------------------------------
+# Decision Recorder — S3 governance tools (write operations: Glass Box required)
+# ---------------------------------------------------------------------------
+
+def dr_log_tension(
+    *,
+    description: str,
+    actor_user_id: str,
+    domain: str | None = None,
+    driver_statement: str | None = None,
+) -> dict:
+    """
+    Log an organisational tension (S3: Navigate Via Tension).
+    Glass Box MUST be called before this function.
+    """
+    payload = {
+        "description": description,
+        "logged_by": actor_user_id,
+        "domain": domain,
+        "driver_statement": driver_statement,
+    }
+    with _http_client() as client:
+        resp = client.post(f"{DECISION_RECORDER_BASE}/tensions", json=payload)
+        resp.raise_for_status()
+        return resp.json()
+
+
+def dr_update_tension(
+    *,
+    tension_id: int,
+    status: str | None = None,
+    driver_statement: str | None = None,
+    loomio_discussion_id: int | None = None,
+) -> dict:
+    """
+    Update a tension's status, driver statement, or linked discussion.
+    Glass Box MUST be called before this function when changing status.
+    """
+    payload: dict = {}
+    if status:
+        payload["status"] = status
+    if driver_statement is not None:
+        payload["driver_statement"] = driver_statement
+    if loomio_discussion_id is not None:
+        payload["loomio_discussion_id"] = loomio_discussion_id
+    with _http_client() as client:
+        resp = client.patch(f"{DECISION_RECORDER_BASE}/tensions/{tension_id}", json=payload)
+        resp.raise_for_status()
+        return resp.json()
+
+
+def dr_set_review_date(
+    *,
+    decision_id: int,
+    review_date: str,
+    review_circle: str | None = None,
+) -> dict:
+    """
+    Set a review date on a recorded agreement (S3: Evaluate and Evolve Agreements).
+    Glass Box MUST be called before this function.
+    review_date must be ISO 8601 format: YYYY-MM-DD.
+    """
+    payload: dict = {"review_date": review_date}
+    if review_circle:
+        payload["review_circle"] = review_circle
+    with _http_client() as client:
+        resp = client.patch(
+            f"{DECISION_RECORDER_BASE}/decisions/{decision_id}/review",
+            json=payload,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+# ---------------------------------------------------------------------------
 # Tool definitions for the Anthropic API tool_use format
 # ---------------------------------------------------------------------------
 
@@ -396,6 +521,106 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "dr_list_due_reviews",
+        "description": (
+            "List cooperative agreements whose review date is approaching. "
+            "Use this to surface agreements that need the circle's attention — "
+            "especially useful when a member asks 'what decisions are due for review?'"
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "days_ahead": {"type": "integer", "description": "Look ahead this many days (default 30, max 365)"},
+            },
+        },
+    },
+    {
+        "name": "dr_list_tensions",
+        "description": (
+            "List organisational tensions that members have logged. "
+            "Tensions are gaps between current reality and what could be — "
+            "the raw material for driver statements and proposals."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "status": {"type": "string", "enum": ["open", "in_progress", "resolved"], "description": "Filter by status (omit for all)"},
+                "domain": {"type": "string", "description": "Filter by circle or domain"},
+                "limit": {"type": "integer", "description": "Max results (default 20)"},
+            },
+        },
+    },
+    {
+        "name": "draft_driver_statement",
+        "description": (
+            "Format a well-structured S3 driver statement from four components. "
+            "Use this when a member wants to articulate a tension as a driver. "
+            "Returns formatted text only — does not post or save anything."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "situation": {"type": "string", "description": "Current state of affairs — what is actually happening now"},
+                "actor": {"type": "string", "description": "Who experiences the need — a role, circle, or the cooperative as a whole"},
+                "need": {"type": "string", "description": "What capability or condition is missing (not a solution)"},
+                "consequence": {"type": "string", "description": "What becomes possible, or what harm is avoided"},
+            },
+            "required": ["situation", "actor", "need", "consequence"],
+        },
+    },
+    {
+        "name": "dr_log_tension",
+        "description": (
+            "Log an organisational tension to the decision recorder. "
+            "REQUIRES glass_box_log to be called first. "
+            "Use when a member describes a gap between current reality and what could be."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "description": {"type": "string", "description": "What the member noticed — the raw tension"},
+                "domain": {"type": "string", "description": "Which circle or area this relates to (optional)"},
+                "driver_statement": {"type": "string", "description": "Formatted S3 driver statement (optional — can be added later)"},
+            },
+            "required": ["description"],
+        },
+    },
+    {
+        "name": "dr_update_tension",
+        "description": (
+            "Update the status or driver statement of a logged tension. "
+            "REQUIRES glass_box_log when changing status. "
+            "Use when a tension has been addressed or linked to a Loomio discussion."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "tension_id": {"type": "integer", "description": "Tension ID from dr_log_tension or dr_list_tensions"},
+                "status": {"type": "string", "enum": ["open", "in_progress", "resolved"]},
+                "driver_statement": {"type": "string", "description": "Updated S3 driver statement"},
+                "loomio_discussion_id": {"type": "integer", "description": "ID of the discussion this tension became"},
+            },
+            "required": ["tension_id"],
+        },
+    },
+    {
+        "name": "dr_set_review_date",
+        "description": (
+            "Set a review date on a recorded agreement (S3: Evaluate and Evolve Agreements). "
+            "REQUIRES glass_box_log to be called first. "
+            "Use after a decision is made, or when a member asks to schedule a review."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "decision_id": {"type": "integer", "description": "Decision ID from the recorded decisions"},
+                "review_date": {"type": "string", "description": "Review date in YYYY-MM-DD format"},
+                "review_circle": {"type": "string", "description": "Loomio group key responsible for initiating the review"},
+            },
+            "required": ["decision_id", "review_date"],
+        },
+    },
+    {
         "name": "mattermost_post_message",
         "description": (
             "Post a message to a Mattermost channel. "
@@ -424,4 +649,11 @@ TOOL_REGISTRY: dict[str, Any] = {
     "loomio_create_discussion": loomio_create_discussion,
     "loomio_create_proposal_draft": loomio_create_proposal_draft,
     "mattermost_post_message": mattermost_post_message,
+    # S3 governance tools
+    "dr_list_due_reviews": dr_list_due_reviews,
+    "dr_list_tensions": dr_list_tensions,
+    "draft_driver_statement": draft_driver_statement,
+    "dr_log_tension": dr_log_tension,
+    "dr_update_tension": dr_update_tension,
+    "dr_set_review_date": dr_set_review_date,
 }
