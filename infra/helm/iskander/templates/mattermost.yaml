@@ -1,0 +1,268 @@
+{{- if .Values.mattermost.enabled }}
+# ---------------------------------------------------------------------------
+# Mattermost — real-time chat and daily coordination
+# Members chat here; the Clerk agent lives here as a bot.
+# Loomio decision outcomes are posted to #governance automatically.
+# ---------------------------------------------------------------------------
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mattermost-secrets
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mattermost
+type: Opaque
+stringData:
+  postgresql-password: {{ .Values.mattermost.postgresql.password | quote }}
+  redis-password: {{ .Values.global.redis.auth.password | quote }}
+  oidc-client-secret: {{ .Values.mattermost.oidc.clientSecret | quote }}
+  clerk-bot-token: {{ .Values.mattermost.clerkBotToken | quote }}
+
+---
+# Mattermost configuration is passed entirely via environment variables.
+# See: https://docs.mattermost.com/configure/environment-variables.html
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mattermost-config
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mattermost
+data:
+  MM_SERVICESETTINGS_SITEURL: {{ printf "https://%s/chat" .Values.global.cooperative.domain | quote }}
+  MM_SERVICESETTINGS_ENABLEOPENSERVER: "false"
+  MM_SERVICESETTINGS_ENABLESIGNUPWITHEMAIL: "false"
+  MM_SERVICESETTINGS_ENABLESIGNINWITHEMAIL: "false"
+  MM_SERVICESETTINGS_ENABLESIGNINWITHUSERNAME: "false"
+  # Database
+  MM_SQLSETTINGS_DRIVERNAME: "postgres"
+  MM_SQLSETTINGS_DATASOURCE: {{ printf "postgres://mattermost:$(MM_DB_PASSWORD)@%s:%d/mattermost?sslmode=disable" (include "iskander.postgresql.host" .) (.Values.global.postgresql.port | int) | quote }}
+  # File storage
+  MM_FILESETTINGS_DRIVERNAME: "local"
+  MM_FILESETTINGS_DIRECTORY: "/mattermost/data"
+  # GitLab OIDC (Mattermost uses the GitLab OAuth flow for OIDC)
+  MM_GITLABSETTINGS_ENABLE: "true"
+  MM_GITLABSETTINGS_ID: "mattermost"
+  MM_GITLABSETTINGS_SCOPE: "openid profile email"
+  MM_GITLABSETTINGS_AUTHENDPOINT: {{ printf "https://%s/application/o/mattermost/authorize/" .Values.global.cooperative.domain | quote }}
+  MM_GITLABSETTINGS_TOKENENDPOINT: {{ printf "https://%s/application/o/token/" .Values.global.cooperative.domain | quote }}
+  MM_GITLABSETTINGS_USERAPIENDPOINT: {{ printf "https://%s/application/o/userinfo/" .Values.global.cooperative.domain | quote }}
+  # Logging
+  MM_LOGSETTINGS_ENABLECONSOLE: "true"
+  MM_LOGSETTINGS_CONSOLELEVEL: "INFO"
+  MM_LOGSETTINGS_ENABLEFILE: "false"
+  # Disable telemetry
+  MM_LOGSETTINGS_ENABLEDIAGNOSTICS: "false"
+  MM_SERVICESETTINGS_ENABLESECURITYFIXALERT: "false"
+  # Plugin settings — pre-install Loomio webhook plugin
+  MM_PLUGINSETTINGS_ENABLE: "true"
+  MM_PLUGINSETTINGS_ENABLEUPLOADS: "false"
+  # Team settings — cooperative team name
+  MM_TEAMSETTINGS_SITENAME: {{ .Values.global.cooperative.name | quote }}
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mattermost-data
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mattermost
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ .Values.global.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.mattermost.dataStorage | default "10Gi" }}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mattermost
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mattermost
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate                # single-node; Recreate avoids PVC mount conflict
+  selector:
+    matchLabels:
+      {{- include "iskander.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: mattermost
+  template:
+    metadata:
+      labels:
+        {{- include "iskander.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: mattermost
+        iskander.coop/db-access: postgresql
+        iskander.coop/db-access-redis: "true"
+        iskander.coop/oidc-client: authentik
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 2000
+        fsGroup: 2000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: mattermost
+          image: {{ .Values.mattermost.image.repository }}:{{ .Values.mattermost.image.tag }}
+          envFrom:
+            - configMapRef:
+                name: mattermost-config
+          env:
+            - name: MM_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mattermost-secrets
+                  key: postgresql-password
+            - name: MM_GITLABSETTINGS_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: mattermost-secrets
+                  key: oidc-client-secret
+          ports:
+            - name: http
+              containerPort: 8065
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /api/v4/system/ping
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /api/v4/system/ping
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /mattermost/data
+          resources:
+            {{- toYaml .Values.mattermost.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: mattermost-data
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mattermost
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mattermost
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "iskander.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: mattermost
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-mattermost
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: mattermost
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Traefik
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 8065
+    # OpenClaw Clerk agent (bot API calls)
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: openclaw
+      ports:
+        - port: 8065
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgresql
+      ports:
+        - port: 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: redis
+      ports:
+        - port: 6379
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: authentik-server
+      ports:
+        - port: 9000
+
+---
+{{- if .Values.mattermost.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mattermost
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    {{- with .Values.mattermost.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  ingressClassName: traefik
+  {{- if .Values.mattermost.ingress.tls }}
+  tls:
+    - hosts:
+        - {{ .Values.global.cooperative.domain | quote }}
+      secretName: mattermost-tls
+  {{- end }}
+  rules:
+    - host: {{ .Values.global.cooperative.domain | quote }}
+      http:
+        paths:
+          - path: /chat
+            pathType: Prefix
+            backend:
+              service:
+                name: mattermost
+                port:
+                  name: http
+{{- end }}
+
+{{- end }}{{/* mattermost.enabled */}}

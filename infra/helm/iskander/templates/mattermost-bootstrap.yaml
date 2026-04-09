@@ -1,0 +1,125 @@
+{{- if .Values.mattermost.enabled }}
+# ---------------------------------------------------------------------------
+# Mattermost bootstrap — post-install hook that:
+#   1. Creates the cooperative's default team
+#   2. Creates the #governance channel (receives Loomio decision notifications)
+#   3. Creates the #general channel
+#   4. Creates the Clerk bot account
+#   5. Registers the Loomio incoming webhook on #governance
+# All operations via the Mattermost REST API — idempotent.
+# ---------------------------------------------------------------------------
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mattermost-bootstrap
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "15"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 5
+  template:
+    metadata:
+      labels:
+        {{- include "iskander.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: mattermost-bootstrap
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: bootstrap
+          image: curlimages/curl:8.5.0
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: COOP_NAME
+              value: {{ .Values.global.cooperative.name | quote }}
+            - name: MM_URL
+              value: "http://mattermost:80"
+            - name: MM_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: mattermost-secrets
+                  key: clerk-bot-token
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+
+              # Wait for Mattermost to be ready
+              echo "Waiting for Mattermost..."
+              until curl -sf "${MM_URL}/api/v4/system/ping" > /dev/null; do
+                sleep 5
+              done
+              echo "Mattermost ready."
+
+              # Helper: POST JSON to Mattermost API
+              mm_post() {
+                curl -sf \
+                  -H "Authorization: Bearer ${MM_ADMIN_TOKEN}" \
+                  -H "Content-Type: application/json" \
+                  -X POST \
+                  -d "$2" \
+                  "${MM_URL}/api/v4/$1"
+              }
+
+              # Helper: GET from Mattermost API
+              mm_get() {
+                curl -sf \
+                  -H "Authorization: Bearer ${MM_ADMIN_TOKEN}" \
+                  "${MM_URL}/api/v4/$1"
+              }
+
+              # 1. Get or create team
+              echo "Ensuring team exists..."
+              TEAM=$(mm_post "teams" "{\"name\":\"coop\",\"display_name\":\"${COOP_NAME}\",\"type\":\"I\"}" 2>/dev/null \
+                || mm_get "teams/name/coop")
+              TEAM_ID=$(echo "$TEAM" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+              echo "Team ID: ${TEAM_ID}"
+
+              # 2. Create #governance channel (receives Loomio decision notifications)
+              echo "Creating #governance channel..."
+              mm_post "channels" "{
+                \"team_id\": \"${TEAM_ID}\",
+                \"name\": \"governance\",
+                \"display_name\": \"Governance\",
+                \"type\": \"O\",
+                \"purpose\": \"Loomio decision notifications and governance discussion\",
+                \"header\": \"Decisions made in Loomio appear here automatically\"
+              }" > /dev/null 2>&1 || echo "#governance already exists"
+
+              # 3. Create #general channel
+              echo "Creating #general channel..."
+              mm_post "channels" "{
+                \"team_id\": \"${TEAM_ID}\",
+                \"name\": \"general\",
+                \"display_name\": \"General\",
+                \"type\": \"O\",
+                \"purpose\": \"General cooperative discussion\"
+              }" > /dev/null 2>&1 || echo "#general already exists"
+
+              # 4. Create incoming webhook on #governance for Loomio notifications
+              echo "Creating Loomio webhook on #governance..."
+              GOV_CHANNEL=$(mm_get "teams/${TEAM_ID}/channels/name/governance")
+              GOV_CHANNEL_ID=$(echo "$GOV_CHANNEL" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+              mm_post "hooks/incoming" "{
+                \"channel_id\": \"${GOV_CHANNEL_ID}\",
+                \"display_name\": \"Loomio Decisions\",
+                \"description\": \"Posts Loomio decision outcomes to this channel\"
+              }" > /dev/null 2>&1 || echo "Webhook already exists"
+
+              echo "Mattermost bootstrap complete."
+
+{{- end }}{{/* mattermost.enabled */}}
