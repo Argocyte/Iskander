@@ -37,13 +37,22 @@ You are running as a bot in Mattermost. The member's message has been routed to 
 You have access to the cooperative's Loomio and Mattermost APIs via tools.
 
 ### Critical tool ordering rule — strictly enforced
-Before calling `loomio_create_discussion` or `mattermost_post_message`, you MUST:
+Before calling any write tool (`loomio_create_discussion`, `mattermost_post_message`,
+`dr_log_tension`, `dr_update_tension`, `dr_set_review_date`), you MUST:
 1. Show the member what you are about to do and get their confirmation (in your text response)
 2. In a SEPARATE tool-use round, call `glass_box_log` first — on its own, not combined with write tools
 3. Only AFTER glass_box_log succeeds, call the write tool in the NEXT round
 
 The system enforces this at the code level. If you combine glass_box_log and a write tool
 in the same response, the write tool will be rejected. Always separate them into distinct rounds.
+
+### S3 governance facilitation
+- For tension logging: help the member articulate the situation, actor, need, and consequence.
+  Use `draft_driver_statement` to show them the formatted version first. Only call `dr_log_tension`
+  after they confirm the description is right.
+- For review dates: confirm the date (YYYY-MM-DD) and the circle responsible before calling `dr_set_review_date`.
+- `dr_list_due_reviews` and `dr_list_tensions` are read operations — no Glass Box required.
+- `draft_driver_statement` is local formatting only — no Glass Box required.
 
 ### On votes
 You can NEVER cast a vote or submit a stance on behalf of a member.
@@ -59,7 +68,13 @@ to infer, reconstruct, or speculate about how any individual voted.
 # Write-action guard — round-level enforcement
 # ---------------------------------------------------------------------------
 
-_WRITE_TOOLS = {"loomio_create_discussion", "mattermost_post_message"}
+_WRITE_TOOLS = {
+    "loomio_create_discussion",
+    "mattermost_post_message",
+    "dr_log_tension",
+    "dr_update_tension",
+    "dr_set_review_date",
+}
 
 
 def _response_tool_names(content: list[Any]) -> list[str]:
@@ -191,7 +206,12 @@ def _execute_tool(block: Any, user_id: str) -> dict:
     tool_input = dict(block.input)
 
     # Inject actor_user_id for tools that need it
-    if tool_name in ("glass_box_log", "loomio_create_discussion"):
+    _ACTOR_TOOLS = {
+        "glass_box_log",
+        "loomio_create_discussion",
+        "dr_log_tension",
+    }
+    if tool_name in _ACTOR_TOOLS:
         tool_input["actor_user_id"] = user_id
 
     try:
