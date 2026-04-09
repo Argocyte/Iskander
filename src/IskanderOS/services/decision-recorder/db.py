@@ -1,9 +1,10 @@
 """
 SQLAlchemy models for the decision-recorder service.
 
-Two tables:
+Tables:
   decisions   — Loomio decision outcomes with IPFS CIDs
   glass_box   — Clerk agent action audit trail
+  tensions    — Organisational tensions (S3: Navigate Via Tension pattern)
 """
 from __future__ import annotations
 
@@ -12,7 +13,9 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     Column,
+    Date,
     DateTime,
     Index,
     String,
@@ -56,6 +59,11 @@ class Decision(Base):
     decided_at = Column(DateTime(timezone=True), nullable=True)
     recorded_at = Column(DateTime(timezone=True), nullable=False,
                          default=lambda: datetime.now(timezone.utc))
+    # S3: Evaluate and Evolve Agreements — review scheduling
+    review_date = Column(Date, nullable=True, index=True)
+    review_circle = Column(String(128), nullable=True)   # Loomio group key responsible
+    review_status = Column(String(32), nullable=True,    # "pending" | "due" | "complete"
+                           default="pending")
 
     __table_args__ = (
         Index("ix_decisions_recorded_at", "recorded_at"),
@@ -75,6 +83,31 @@ class GlassBoxEntry(Base):
     timestamp = Column(DateTime(timezone=True), nullable=False, index=True)
     created_at = Column(DateTime(timezone=True), nullable=False,
                         default=lambda: datetime.now(timezone.utc))
+
+
+class Tension(Base):
+    """
+    An organisational tension logged by a member via the Clerk.
+    S3 pattern: Navigate Via Tension — gaps between current reality and what could be.
+    Tensions are the raw material from which driver statements and proposals emerge.
+    """
+    __tablename__ = "tensions"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    logged_by = Column(String(128), nullable=False, index=True)   # Mattermost user ID
+    description = Column(Text, nullable=False)                     # What the member noticed
+    domain = Column(String(128), nullable=True)                    # Circle/group this relates to
+    driver_statement = Column(Text, nullable=True)                 # Formatted S3 driver (if drafted)
+    status = Column(String(32), nullable=False, default="open")   # "open" | "in_progress" | "resolved"
+    loomio_discussion_id = Column(BigInteger, nullable=True)       # Set when tension becomes discussion
+    logged_at = Column(DateTime(timezone=True), nullable=False,
+                       default=lambda: datetime.now(timezone.utc))
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_tensions_logged_by", "logged_by"),
+        Index("ix_tensions_status", "status"),
+    )
 
 
 def create_tables() -> None:
