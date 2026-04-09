@@ -250,6 +250,34 @@ nextcloud:
 
 openclaw:
   enabled: false
+  image:
+    repository: ghcr.io/argocyte/openclaw
+    tag: "0.1.0"
+
+  # Anthropic API key — required for Clerk agent
+  anthropicApiKey: ""
+
+  # Model for the Clerk agent (haiku is fast and cheap; sonnet for complex tasks)
+  clerkModel: "claude-haiku-4-5-20251001"
+
+  logLevel: "INFO"
+
+  loomio:
+    apiKey: ""
+
+  mattermost:
+    botToken: ""
+    webhookToken: ""          # Mattermost outgoing webhook verification token
+    botUserId: ""             # Populated after bot account is created
+    governanceChannelId: ""   # Populated after mattermost-bootstrap runs
+
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "50m"
+    limits:
+      memory: "256Mi"
+      cpu: "500m"
 
 ollama:
   enabled: false
