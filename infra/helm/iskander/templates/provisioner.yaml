@@ -1,0 +1,198 @@
+{{- if .Values.provisioner.enabled }}
+# ---------------------------------------------------------------------------
+# Provisioner — member onboarding service.
+# Orchestrates account creation across Authentik → Loomio → Mattermost.
+# Called by the Clerk agent; not exposed externally.
+# ---------------------------------------------------------------------------
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: provisioner-secrets
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: provisioner
+type: Opaque
+stringData:
+  postgresql-password: {{ .Values.provisioner.postgresql.password | quote }}
+  authentik-api-token: {{ .Values.provisioner.authentik.apiToken | quote }}
+  loomio-api-key: {{ .Values.openclaw.loomio.apiKey | quote }}
+  mattermost-bot-token: {{ .Values.openclaw.mattermost.botToken | quote }}
+  # Optional: shared with decision-recorder; adds auth on top of NetworkPolicy in Phase B.
+  internal-service-token: {{ .Values.decisionRecorder.internalServiceToken | default "" | quote }}
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: provisioner-config
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: provisioner
+data:
+  DATABASE_URL: {{ printf "postgresql+psycopg2://provisioner:%s@%s:%d/provisioner" .Values.provisioner.postgresql.password (include "iskander.postgresql.host" .) (.Values.global.postgresql.port | int) | quote }}
+  AUTHENTIK_URL: {{ printf "http://authentik-server:9000" | quote }}
+  LOOMIO_URL: {{ printf "http://loomio:80" | quote }}
+  MATTERMOST_URL: {{ printf "http://mattermost:80" | quote }}
+  LOOMIO_GROUP_KEY: {{ .Values.provisioner.loomioGroupKey | quote }}
+  MATTERMOST_ONBOARDING_CHANNEL: {{ .Values.provisioner.mattermostOnboardingChannel | quote }}
+  LOG_LEVEL: {{ .Values.provisioner.logLevel | default "INFO" | quote }}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: provisioner
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: provisioner
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "iskander.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: provisioner
+  template:
+    metadata:
+      labels:
+        {{- include "iskander.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: provisioner
+        iskander.coop/db-access: postgresql
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: provisioner
+          image: {{ .Values.provisioner.image.repository }}:{{ .Values.provisioner.image.tag }}
+          envFrom:
+            - configMapRef:
+                name: provisioner-config
+          env:
+            - name: PROVISIONER_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: provisioner-secrets
+                  key: postgresql-password
+            - name: AUTHENTIK_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: provisioner-secrets
+                  key: authentik-api-token
+            - name: LOOMIO_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: provisioner-secrets
+                  key: loomio-api-key
+            - name: MATTERMOST_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: provisioner-secrets
+                  key: mattermost-bot-token
+            - name: INTERNAL_SERVICE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: provisioner-secrets
+                  key: internal-service-token
+                  optional: true
+          ports:
+            - name: http
+              containerPort: 3001
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.provisioner.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: provisioner
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: provisioner
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "iskander.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: provisioner
+  ports:
+    - name: http
+      port: 3001
+      targetPort: http
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-provisioner
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: provisioner
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Only OpenClaw (Clerk agent) may call the provisioner
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: openclaw
+      ports:
+        - port: 3001
+  egress:
+    # PostgreSQL — provisioner's own DB
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgresql
+      ports:
+        - port: 5432
+    # Authentik — SSO account creation
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: authentik-server
+      ports:
+        - port: 9000
+    # Loomio — membership registration
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: loomio
+      ports:
+        - port: 80
+    # Mattermost — welcome message posting
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: mattermost
+      ports:
+        - port: 80
+
+{{- end }}
