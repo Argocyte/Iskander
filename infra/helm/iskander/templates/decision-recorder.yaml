@@ -1,0 +1,173 @@
+{{- if or .Values.loomio.enabled .Values.openclaw.enabled }}
+# ---------------------------------------------------------------------------
+# Decision Recorder — deployed whenever Loomio or OpenClaw is enabled.
+# Provides: Loomio webhook receiver, IPFS pinning, Glass Box audit trail API.
+# ---------------------------------------------------------------------------
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: decision-recorder-secrets
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: decision-recorder
+type: Opaque
+stringData:
+  postgresql-password: {{ .Values.decisionRecorder.postgresql.password | quote }}
+  loomio-webhook-secret: {{ .Values.loomio.webhookSecret | default "" | quote }}
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: decision-recorder-config
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: decision-recorder
+data:
+  DATABASE_URL: {{ printf "postgresql+psycopg2://decision_recorder:$(DR_DB_PASSWORD)@%s:%d/decision_recorder" (include "iskander.postgresql.host" .) (.Values.global.postgresql.port | int) | quote }}
+  IPFS_API_URL: "http://ipfs:5001"
+  LOOMIO_URL: "http://loomio:80"
+  LOG_LEVEL: {{ .Values.decisionRecorder.logLevel | default "INFO" | quote }}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: decision-recorder
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: decision-recorder
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "iskander.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: decision-recorder
+  template:
+    metadata:
+      labels:
+        {{- include "iskander.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: decision-recorder
+        iskander.coop/db-access: postgresql
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: decision-recorder
+          image: {{ .Values.decisionRecorder.image.repository }}:{{ .Values.decisionRecorder.image.tag }}
+          envFrom:
+            - configMapRef:
+                name: decision-recorder-config
+          env:
+            - name: DR_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: decision-recorder-secrets
+                  key: postgresql-password
+            - name: LOOMIO_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: decision-recorder-secrets
+                  key: loomio-webhook-secret
+          ports:
+            - name: http
+              containerPort: 3000
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.decisionRecorder.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: decision-recorder
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: decision-recorder
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "iskander.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: decision-recorder
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-decision-recorder
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: decision-recorder
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Loomio fires outcome webhooks
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: loomio
+      ports:
+        - port: 3000
+    # OpenClaw posts Glass Box log entries and reads audit trail
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: openclaw
+      ports:
+        - port: 3000
+    # Traefik (Glass Box readable by members via browser)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 3000
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgresql
+      ports:
+        - port: 5432
+    # IPFS Kubo API
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: ipfs
+      ports:
+        - port: 5001
+
+{{- end }}
