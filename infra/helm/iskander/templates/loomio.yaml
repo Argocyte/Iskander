@@ -1,0 +1,360 @@
+{{- if .Values.loomio.enabled }}
+# ---------------------------------------------------------------------------
+# Loomio — cooperative governance engine
+# Members use this to create proposals, deliberate, and make decisions.
+# Every outcome fires a webhook to the decision-recorder service.
+# ---------------------------------------------------------------------------
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: loomio-secrets
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: loomio
+type: Opaque
+stringData:
+  secret-key-base: {{ .Values.loomio.secretKeyBase | quote }}
+  postgresql-password: {{ .Values.loomio.postgresql.password | quote }}
+  redis-password: {{ .Values.global.redis.auth.password | quote }}
+  oidc-client-secret: {{ .Values.loomio.oidc.clientSecret | quote }}
+  smtp-password: {{ .Values.loomio.smtp.password | default "" | quote }}
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loomio-config
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: loomio
+data:
+  RAILS_ENV: "production"
+  RAILS_LOG_TO_STDOUT: "true"
+  # Database
+  DATABASE_URL: {{ printf "postgresql://loomio:$(LOOMIO_DB_PASSWORD)@%s:%d/loomio" (include "iskander.postgresql.host" .) (.Values.global.postgresql.port | int) | quote }}
+  # Redis (DB index 2)
+  REDIS_URL: {{ printf "redis://:$(REDIS_PASSWORD)@%s:%d/2" (include "iskander.redis.host" .) (.Values.global.redis.port | int) | quote }}
+  # OIDC / Authentik SSO
+  OAUTH_PROVIDER: "openid_connect"
+  OAUTH_SITE: {{ printf "https://%s" .Values.global.cooperative.domain | quote }}
+  OAUTH_AUTHORIZATION_ENDPOINT: {{ printf "https://%s/application/o/loomio/authorize/" .Values.global.cooperative.domain | quote }}
+  OAUTH_TOKEN_ENDPOINT: {{ printf "https://%s/application/o/token/" .Values.global.cooperative.domain | quote }}
+  OAUTH_USERINFO_ENDPOINT: {{ printf "https://%s/application/o/userinfo/" .Values.global.cooperative.domain | quote }}
+  OAUTH_CLIENT_ID: "loomio"
+  OAUTH_SCOPE: "openid profile email"
+  OAUTH_MAPPING_EMAIL: "email"
+  OAUTH_MAPPING_NAME: "name"
+  # App host
+  APP_HOST: {{ printf "https://%s" .Values.global.cooperative.domain | quote }}
+  ALLOW_SIGN_UP: "false"           # members join via Authentik invitation, not self-registration
+  FEATURES_DISABLE_EMAIL_LOGIN: "true"  # force SSO — no password login fallback
+  # Outbound webhook to decision-recorder on every outcome
+  LOOMIO_WEBHOOK_URL: "http://decision-recorder:3000/webhook/loomio"
+  LOOMIO_WEBHOOK_SECRET: {{ .Values.loomio.webhookSecret | quote }}
+  # SMTP
+  SMTP_ADDRESS: {{ .Values.loomio.smtp.host | default "" | quote }}
+  SMTP_PORT: {{ .Values.loomio.smtp.port | default 587 | toString | quote }}
+  SMTP_ENABLE_STARTTLS_AUTO: {{ .Values.loomio.smtp.useTLS | default true | toString | quote }}
+  # Storage — local filesystem backed by PVC (S3 optional later)
+  STORAGE_SERVICE: "local"
+  STORAGE_LOCAL_ROOT_PATH: "/loomio/uploads"
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: loomio-uploads
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: loomio
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ .Values.global.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.loomio.uploadStorage | default "5Gi" }}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loomio
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: loomio
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "iskander.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: loomio
+  template:
+    metadata:
+      labels:
+        {{- include "iskander.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: loomio
+        iskander.coop/db-access: postgresql
+        iskander.coop/db-access-redis: "true"
+        iskander.coop/oidc-client: authentik
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # Run database migrations before starting the server
+        - name: migrate
+          image: {{ .Values.loomio.image.repository }}:{{ .Values.loomio.image.tag }}
+          command: ["bundle", "exec", "rails", "db:migrate"]
+          envFrom:
+            - configMapRef:
+                name: loomio-config
+          env:
+            - name: LOOMIO_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: loomio-secrets
+                  key: postgresql-password
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: loomio-secrets
+                  key: redis-password
+            - name: SECRET_KEY_BASE
+              valueFrom:
+                secretKeyRef:
+                  name: loomio-secrets
+                  key: secret-key-base
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+      containers:
+        - name: loomio
+          image: {{ .Values.loomio.image.repository }}:{{ .Values.loomio.image.tag }}
+          command: ["bundle", "exec", "rails", "server", "-b", "0.0.0.0"]
+          envFrom:
+            - configMapRef:
+                name: loomio-config
+          env:
+            - name: LOOMIO_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: loomio-secrets
+                  key: postgresql-password
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: loomio-secrets
+                  key: redis-password
+            - name: SECRET_KEY_BASE
+              valueFrom:
+                secretKeyRef:
+                  name: loomio-secrets
+                  key: secret-key-base
+            - name: OAUTH_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: loomio-secrets
+                  key: oidc-client-secret
+            - name: SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: loomio-secrets
+                  key: smtp-password
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          volumeMounts:
+            - name: uploads
+              mountPath: /loomio/uploads
+          resources:
+            {{- toYaml .Values.loomio.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+
+        # Sidekiq worker — background jobs (emails, webhook delivery, etc.)
+        - name: worker
+          image: {{ .Values.loomio.image.repository }}:{{ .Values.loomio.image.tag }}
+          command: ["bundle", "exec", "sidekiq"]
+          envFrom:
+            - configMapRef:
+                name: loomio-config
+          env:
+            - name: LOOMIO_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: loomio-secrets
+                  key: postgresql-password
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: loomio-secrets
+                  key: redis-password
+            - name: SECRET_KEY_BASE
+              valueFrom:
+                secretKeyRef:
+                  name: loomio-secrets
+                  key: secret-key-base
+          volumeMounts:
+            - name: uploads
+              mountPath: /loomio/uploads
+          resources:
+            {{- toYaml .Values.loomio.workerResources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+
+      volumes:
+        - name: uploads
+          persistentVolumeClaim:
+            claimName: loomio-uploads
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loomio
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: loomio
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "iskander.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: loomio
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-loomio
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: loomio
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Traefik ingress
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 3000
+    # OpenClaw Clerk agent querying the Loomio API
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: openclaw
+      ports:
+        - port: 3000
+  egress:
+    # PostgreSQL
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgresql
+      ports:
+        - port: 5432
+    # Redis
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: redis
+      ports:
+        - port: 6379
+    # Authentik OIDC callbacks
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: authentik-server
+      ports:
+        - port: 9000
+    # Decision recorder webhook
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: decision-recorder
+      ports:
+        - port: 3000
+    # SMTP
+    - ports:
+        - port: 587
+        - port: 465
+
+---
+{{- if .Values.loomio.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: loomio
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    # Loomio handles its own CSRF; increase body size for file uploads
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ include "iskander.namespace" . }}-loomio-headers@kubernetescrd"
+    {{- with .Values.loomio.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  ingressClassName: traefik
+  {{- if .Values.loomio.ingress.tls }}
+  tls:
+    - hosts:
+        - {{ .Values.global.cooperative.domain | quote }}
+      secretName: loomio-tls
+  {{- end }}
+  rules:
+    - host: {{ .Values.global.cooperative.domain | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: loomio
+                port:
+                  name: http
+{{- end }}
+
+{{- end }}{{/* loomio.enabled */}}
