@@ -786,7 +786,6 @@ TOOL_DEFINITIONS = [
             "required": ["channel_id", "message"],
         },
     },
-<<<<<<< feature/meeting-prep-clerk
     # Meeting prep tools — read-only
     {
         "name": "list_recent_decisions",
@@ -820,7 +819,14 @@ TOOL_DEFINITIONS = [
             "Generate a draft meeting agenda from the Glass Box: "
             "agreements due for review, open tensions, and recent decisions. "
             "Returns a formatted Markdown document ready to share."
-=======
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "group_key": {"type": "string", "description": "Optional: filter decisions by Loomio group key"},
+            },
+        },
+    },
     {
         "name": "provision_member",
         "description": (
@@ -828,21 +834,15 @@ TOOL_DEFINITIONS = [
             "REQUIRES glass_box_log to be called first. "
             "REQUIRES explicit member confirmation before calling. "
             "Returns a password reset URL to share with the new member."
->>>>>>> main
         ),
         "input_schema": {
             "type": "object",
             "properties": {
-<<<<<<< feature/meeting-prep-clerk
-                "group_key": {"type": "string", "description": "Optional: filter decisions by Loomio group key"},
-            },
-=======
                 "username": {"type": "string", "description": "Lowercase username (letters, numbers, hyphens, underscores only)"},
                 "email": {"type": "string", "description": "New member's email address"},
                 "display_name": {"type": "string", "description": "Display name (optional, defaults to username)"},
             },
             "required": ["username", "email"],
->>>>>>> main
         },
     },
 ]
