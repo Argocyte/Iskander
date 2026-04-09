@@ -314,15 +314,108 @@ decisionRecorder:
 
 vaultwarden:
   enabled: false
+  image:
+    repository: vaultwarden/server
+    tag: "1.30.5"           # pin; update intentionally
+
+  adminToken: ""            # populated by install script (argon2 hash recommended)
+  dataStorage: "1Gi"
+
+  postgresql:
+    password: ""
+
+  oidc:
+    clientSecret: ""        # populated from Authentik bootstrap output
+
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "25m"
+    limits:
+      memory: "128Mi"
+      cpu: "200m"
+
+  ingress:
+    enabled: true
+    tls: true
+    annotations: {}
 
 backrest:
   enabled: false
+  image:
+    repository: garethgeorge/backrest
+    tag: "v1.4.0"           # pin; update intentionally
+
+  # Restic repository encryption password — STORE THIS IN VAULTWARDEN
+  # Losing this password means losing access to all backups.
+  repositoryPassword: ""
+
+  # Primary backup destination — local disk by default.
+  # For off-site backups, enable s3 and set credentials below.
+  repository:
+    path: "/backups/restic"   # local path inside the pod (mount an external volume here)
+
+  s3:
+    enabled: false
+    endpoint: "s3.amazonaws.com"
+    bucket: ""
+    region: "us-east-1"
+    accessKeyId: ""
+    secretAccessKey: ""
+
+  # Staging area for PostgreSQL dumps before they are snapshotted
+  pgStagingStorage: "5Gi"
+  # Backrest state and config
+  dataStorage: "2Gi"
+
+  mattermost:
+    webhookUrl: ""          # Mattermost incoming webhook URL for backup notifications
+
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "25m"
+    limits:
+      memory: "256Mi"
+      cpu: "500m"
+
+  ingress:
+    enabled: true
+    tls: true
+    annotations: {}
 
 cloudflared:
   enabled: false
 
 beszel:
   enabled: false
+  image:
+    repository: henrygd/beszel
+    tag: "latest"           # Beszel follows rolling tags; pin when stable release exists
+
+  adminPassword: ""         # populated by install script
+
+  dataStorage: "1Gi"
+
+  alerts:
+    diskThresholdPercent: 80
+    memoryThresholdPercent: 90
+
+  mattermost:
+    webhookUrl: ""          # Mattermost incoming webhook URL for monitoring alerts
+
+  resources:
+    requests:
+      memory: "32Mi"
+      cpu: "25m"
+    limits:
+      memory: "96Mi"
+      cpu: "200m"
+
+  ingress:
+    enabled: true
+    tls: true
+    annotations: {}
 
 headscale:
   enabled: false

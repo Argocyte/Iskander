@@ -1,0 +1,242 @@
+{{- if .Values.vaultwarden.enabled }}
+# ---------------------------------------------------------------------------
+# Vaultwarden — shared credential management
+# Bitwarden-compatible server; members share a cooperative organisation vault
+# and can have personal vaults. OIDC login via Authentik.
+# ---------------------------------------------------------------------------
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vaultwarden-secrets
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: vaultwarden
+type: Opaque
+stringData:
+  admin-token: {{ .Values.vaultwarden.adminToken | quote }}
+  postgresql-password: {{ .Values.vaultwarden.postgresql.password | quote }}
+  oidc-client-secret: {{ .Values.vaultwarden.oidc.clientSecret | quote }}
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vaultwarden-config
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: vaultwarden
+data:
+  DOMAIN: {{ printf "https://%s/vault" .Values.global.cooperative.domain | quote }}
+  SIGNUPS_ALLOWED: "false"           # Members join via Authentik invite; no open signup
+  INVITATIONS_ALLOWED: "true"
+  SSO_ENABLED: "true"
+  SSO_ONLY: "true"
+  SSO_AUTHORITY: {{ printf "https://%s/application/o/vaultwarden/" .Values.global.cooperative.domain | quote }}
+  SSO_CLIENT_ID: "vaultwarden"
+  # PostgreSQL
+  DATABASE_URL: {{ printf "postgresql://vaultwarden:$(VW_DB_PASSWORD)@%s:%d/vaultwarden" (include "iskander.postgresql.host" .) (.Values.global.postgresql.port | int) | quote }}
+  # Logging
+  LOG_LEVEL: "warn"
+  EXTENDED_LOGGING: "false"
+  # Disable features we don't need
+  SENDS_ALLOWED: "true"
+  ORG_CREATION_USERS: "admin"        # Only admin can create organisations
+  DISABLE_2FA_REMEMBER: "false"
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vaultwarden-data
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: vaultwarden
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ .Values.global.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.vaultwarden.dataStorage | default "1Gi" }}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vaultwarden
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: vaultwarden
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "iskander.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: vaultwarden
+  template:
+    metadata:
+      labels:
+        {{- include "iskander.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: vaultwarden
+        iskander.coop/db-access: postgresql
+        iskander.coop/oidc-client: authentik
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: vaultwarden
+          image: {{ .Values.vaultwarden.image.repository }}:{{ .Values.vaultwarden.image.tag }}
+          envFrom:
+            - configMapRef:
+                name: vaultwarden-config
+          env:
+            - name: VW_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: vaultwarden-secrets
+                  key: postgresql-password
+            - name: ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: vaultwarden-secrets
+                  key: admin-token
+            - name: SSO_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: vaultwarden-secrets
+                  key: oidc-client-secret
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /alive
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /alive
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            {{- toYaml .Values.vaultwarden.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: vaultwarden-data
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vaultwarden
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: vaultwarden
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "iskander.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: vaultwarden
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-vaultwarden
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: vaultwarden
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Traefik
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 80
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgresql
+      ports:
+        - port: 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: authentik-server
+      ports:
+        - port: 9000
+
+---
+{{- if .Values.vaultwarden.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: vaultwarden
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    {{- with .Values.vaultwarden.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  ingressClassName: traefik
+  {{- if .Values.vaultwarden.ingress.tls }}
+  tls:
+    - hosts:
+        - {{ .Values.global.cooperative.domain | quote }}
+      secretName: vaultwarden-tls
+  {{- end }}
+  rules:
+    - host: {{ .Values.global.cooperative.domain | quote }}
+      http:
+        paths:
+          - path: /vault
+            pathType: Prefix
+            backend:
+              service:
+                name: vaultwarden
+                port:
+                  name: http
+{{- end }}
+
+{{- end }}{{/* vaultwarden.enabled */}}
