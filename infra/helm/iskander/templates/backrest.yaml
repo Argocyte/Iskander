@@ -1,0 +1,406 @@
+{{- if .Values.backrest.enabled }}
+# ---------------------------------------------------------------------------
+# Backrest — Restic backup UI
+# Web interface over the Restic backup engine. Backs up PostgreSQL, Nextcloud,
+# IPFS decision records, and Vaultwarden exports on a daily schedule.
+# Members can browse backups and trigger restores from the web UI.
+# ---------------------------------------------------------------------------
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: backrest-secrets
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backrest
+type: Opaque
+stringData:
+  repository-password: {{ .Values.backrest.repositoryPassword | quote }}
+  {{- if .Values.backrest.s3.enabled }}
+  aws-access-key-id: {{ .Values.backrest.s3.accessKeyId | quote }}
+  aws-secret-access-key: {{ .Values.backrest.s3.secretAccessKey | quote }}
+  {{- end }}
+  mattermost-webhook-url: {{ .Values.backrest.mattermost.webhookUrl | quote }}
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backrest-config
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backrest
+data:
+  # Backrest writes its own config.json; this ConfigMap holds our init script
+  init.sh: |
+    #!/bin/sh
+    set -e
+
+    CONFIG_DIR=/data/config
+    CONFIG_FILE=$CONFIG_DIR/config.json
+
+    mkdir -p $CONFIG_DIR
+
+    # Only write config on first boot — don't overwrite user changes
+    if [ -f "$CONFIG_FILE" ]; then
+      echo "Config already exists, skipping init"
+      exit 0
+    fi
+
+    REPO_PATH="{{ .Values.backrest.repository.path | default "/backups" }}"
+    {{- if .Values.backrest.s3.enabled }}
+    REPO_PATH="s3:{{ .Values.backrest.s3.endpoint }}/{{ .Values.backrest.s3.bucket }}"
+    {{- end }}
+
+    cat > $CONFIG_FILE <<EOF
+    {
+      "modno": 1,
+      "instance": "iskander",
+      "repos": [
+        {
+          "id": "main",
+          "uri": "$REPO_PATH",
+          "password": "$(cat /run/secrets/repository-password)",
+          "prunePolicy": {
+            "maxFrequencyDays": 1,
+            "schedule": "0 3 * * *",
+            "keepLastN": 7,
+            "keepWeekly": 4,
+            "keepMonthly": 6
+          }
+        }
+      ],
+      "plans": [
+        {
+          "id": "postgresql",
+          "repo": "main",
+          "paths": ["/backups/postgresql"],
+          "schedule": "0 2 * * *",
+          "retention": {"policy": "policyKeepLastN", "keepLastN": 14}
+        },
+        {
+          "id": "nextcloud",
+          "repo": "main",
+          "paths": ["/mnt/nextcloud-data"],
+          "schedule": "0 2 * * *",
+          "retention": {"policy": "policyKeepLastN", "keepLastN": 14}
+        },
+        {
+          "id": "ipfs-decisions",
+          "repo": "main",
+          "paths": ["/mnt/ipfs-data"],
+          "schedule": "0 2 * * *",
+          "retention": {"policy": "policyKeepLastN", "keepLastN": 30}
+        }
+      ]
+    }
+    EOF
+    echo "Backrest config initialised"
+
+  # pg-dump.sh runs as a pre-backup hook to dump all cooperative databases
+  pg-dump.sh: |
+    #!/bin/sh
+    set -e
+    PGPASSWORD="$POSTGRES_PASSWORD" pg_dumpall \
+      -h {{ include "iskander.postgresql.host" . }} \
+      -U iskander \
+      --file /backups/postgresql/dump_$(date +%Y%m%d_%H%M%S).sql
+    # Keep only the last 7 dumps locally (Restic will handle long-term retention)
+    ls -t /backups/postgresql/dump_*.sql | tail -n +8 | xargs -r rm
+
+  # notify.sh — posts backup status to Mattermost #ops
+  notify.sh: |
+    #!/bin/sh
+    STATUS="$1"
+    PLAN="$2"
+    if [ -z "$MATTERMOST_WEBHOOK_URL" ]; then exit 0; fi
+    if [ "$STATUS" = "success" ]; then
+      ICON=":white_check_mark:"
+      MSG="Backup completed: **$PLAN**"
+    else
+      ICON=":rotating_light:"
+      MSG="**Backup FAILED**: $PLAN — check Backrest for details"
+    fi
+    curl -s -X POST "$MATTERMOST_WEBHOOK_URL" \
+      -H "Content-Type: application/json" \
+      -d "{\"text\": \"$ICON $MSG\"}"
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: backrest-data
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backrest
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ .Values.global.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.backrest.dataStorage | default "2Gi" }}
+
+---
+# Separate PVC for local PostgreSQL dump staging
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: backrest-pg-staging
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backrest
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ .Values.global.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.backrest.pgStagingStorage | default "5Gi" }}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backrest
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backrest
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "iskander.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: backrest
+  template:
+    metadata:
+      labels:
+        {{- include "iskander.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: backrest
+    spec:
+      securityContext:
+        runAsNonRoot: false           # Restic needs root to read all mount paths
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: backrest-init
+          image: {{ .Values.backrest.image.repository }}:{{ .Values.backrest.image.tag }}
+          command: ["/bin/sh", "/config/init.sh"]
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-secrets
+                  key: password
+                  optional: true
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: config-scripts
+              mountPath: /config
+            - name: repository-password
+              mountPath: /run/secrets/repository-password
+              subPath: repository-password
+      containers:
+        - name: backrest
+          image: {{ .Values.backrest.image.repository }}:{{ .Values.backrest.image.tag }}
+          args: ["serve", "--config", "/data/config/config.json", "--bind-address", "0.0.0.0:9898"]
+          env:
+            - name: BACKREST_DATA
+              value: /data
+            - name: MATTERMOST_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: backrest-secrets
+                  key: mattermost-webhook-url
+                  optional: true
+            {{- if .Values.backrest.s3.enabled }}
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: backrest-secrets
+                  key: aws-access-key-id
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: backrest-secrets
+                  key: aws-secret-access-key
+            - name: AWS_DEFAULT_REGION
+              value: {{ .Values.backrest.s3.region | default "us-east-1" | quote }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: 9898
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: config-scripts
+              mountPath: /config
+            - name: pg-staging
+              mountPath: /backups/postgresql
+            {{- if .Values.nextcloud.enabled }}
+            - name: nextcloud-data
+              mountPath: /mnt/nextcloud-data
+              readOnly: true
+            {{- end }}
+            {{- if .Values.ipfs.enabled }}
+            - name: ipfs-data
+              mountPath: /mnt/ipfs-data
+              readOnly: true
+            {{- end }}
+          resources:
+            {{- toYaml .Values.backrest.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: backrest-data
+        - name: config-scripts
+          configMap:
+            name: backrest-config
+            defaultMode: 0755
+        - name: pg-staging
+          persistentVolumeClaim:
+            claimName: backrest-pg-staging
+        - name: repository-password
+          secret:
+            secretName: backrest-secrets
+            items:
+              - key: repository-password
+                path: repository-password
+        {{- if .Values.nextcloud.enabled }}
+        - name: nextcloud-data
+          persistentVolumeClaim:
+            claimName: nextcloud-data
+        {{- end }}
+        {{- if .Values.ipfs.enabled }}
+        - name: ipfs-data
+          persistentVolumeClaim:
+            claimName: ipfs-data
+        {{- end }}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backrest
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backrest
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "iskander.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: backrest
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-backrest
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: backrest
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Traefik (admin access only — route should be protected by Authentik forward-auth)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 9898
+  egress:
+    # PostgreSQL for dumps
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgresql
+      ports:
+        - port: 5432
+    # S3/external backup destinations
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - port: 443
+
+---
+{{- if .Values.backrest.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: backrest
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    # Protect with Authentik forward-auth — backup UI should not be public
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ include "iskander.namespace" . }}-authentik-proxy@kubernetescrd"
+    {{- with .Values.backrest.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  ingressClassName: traefik
+  {{- if .Values.backrest.ingress.tls }}
+  tls:
+    - hosts:
+        - {{ .Values.global.cooperative.domain | quote }}
+      secretName: backrest-tls
+  {{- end }}
+  rules:
+    - host: {{ .Values.global.cooperative.domain | quote }}
+      http:
+        paths:
+          - path: /backups
+            pathType: Prefix
+            backend:
+              service:
+                name: backrest
+                port:
+                  name: http
+{{- end }}
+
+{{- end }}{{/* backrest.enabled */}}
