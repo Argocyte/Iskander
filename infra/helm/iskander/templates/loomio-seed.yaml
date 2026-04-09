@@ -1,0 +1,89 @@
+{{- if .Values.loomio.enabled }}
+# ---------------------------------------------------------------------------
+# Loomio seed job — creates the founding cooperative group on first install.
+# Members are invited via Authentik; this just ensures the group exists.
+# Runs as a Helm post-install hook; skipped on upgrade.
+# ---------------------------------------------------------------------------
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: loomio-seed
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "20"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 5
+  template:
+    metadata:
+      labels:
+        {{- include "iskander.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: loomio-seed
+        iskander.coop/db-access: postgresql
+        iskander.coop/db-access-redis: "true"
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: seed
+          image: {{ .Values.loomio.image.repository }}:{{ .Values.loomio.image.tag }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+
+              echo "Waiting for Loomio to be ready..."
+              until bundle exec rails runner "puts 'ok'" 2>/dev/null; do
+                sleep 5
+              done
+
+              echo "Seeding cooperative group..."
+              bundle exec rails runner "
+                group = Group.find_or_initialize_by(name: ENV['COOP_NAME'])
+                if group.new_record?
+                  group.description = 'The founding cooperative group'
+                  group.is_visible_to_public = false
+                  group.discussion_privacy_options = 'private'
+                  group.save!
+                  puts \"Created group: #{group.name} (#{group.key})\"
+                else
+                  puts \"Group already exists: #{group.name}\"
+                end
+              "
+          envFrom:
+            - configMapRef:
+                name: loomio-config
+          env:
+            - name: COOP_NAME
+              value: {{ .Values.global.cooperative.name | quote }}
+            - name: LOOMIO_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: loomio-secrets
+                  key: postgresql-password
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: loomio-secrets
+                  key: redis-password
+            - name: SECRET_KEY_BASE
+              valueFrom:
+                secretKeyRef:
+                  name: loomio-secrets
+                  key: secret-key-base
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+
+{{- end }}{{/* loomio.enabled */}}
