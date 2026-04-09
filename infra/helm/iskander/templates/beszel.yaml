@@ -1,0 +1,315 @@
+{{- if .Values.beszel.enabled }}
+# ---------------------------------------------------------------------------
+# Beszel — lightweight system monitoring
+# ~50 MB RAM vs Grafana+Prometheus (~400-800 MB).
+# Provides CPU, memory, disk, network, and container health dashboards.
+# Alerts: disk >80%, service down, backup failed → Mattermost #ops.
+# ---------------------------------------------------------------------------
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: beszel-secrets
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: beszel
+type: Opaque
+stringData:
+  admin-password: {{ .Values.beszel.adminPassword | quote }}
+  mattermost-webhook-url: {{ .Values.beszel.mattermost.webhookUrl | quote }}
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: beszel-config
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: beszel
+data:
+  # Alert webhook script — called by Beszel on threshold breach
+  alert.sh: |
+    #!/bin/sh
+    ALERT_TYPE="$1"
+    ALERT_VALUE="$2"
+    HOST="$3"
+
+    if [ -z "$MATTERMOST_WEBHOOK_URL" ]; then exit 0; fi
+
+    case "$ALERT_TYPE" in
+      disk_high)
+        MSG=":warning: **Disk usage high** on \`$HOST\`: $ALERT_VALUE% — free up space or expand storage"
+        ;;
+      service_down)
+        MSG=":rotating_light: **Service down** on \`$HOST\`: $ALERT_VALUE — investigate immediately"
+        ;;
+      memory_high)
+        MSG=":warning: **Memory usage high** on \`$HOST\`: $ALERT_VALUE% — check for runaway processes"
+        ;;
+      cpu_sustained)
+        MSG=":warning: **CPU sustained high** on \`$HOST\`: $ALERT_VALUE% for 5+ minutes"
+        ;;
+      *)
+        MSG=":information_source: Beszel alert on \`$HOST\`: $ALERT_TYPE — $ALERT_VALUE"
+        ;;
+    esac
+
+    curl -s -X POST "$MATTERMOST_WEBHOOK_URL" \
+      -H "Content-Type: application/json" \
+      -d "{\"text\": \"$MSG\"}"
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: beszel-data
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: beszel
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ .Values.global.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.beszel.dataStorage | default "1Gi" }}
+
+---
+# ClusterRole to read node and pod metrics from the K3s API
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: beszel-metrics-reader
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: beszel
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "pods", "namespaces"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["nodes", "pods"]
+    verbs: ["get", "list"]
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: beszel
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: beszel
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: beszel-metrics-reader
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: beszel
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: beszel-metrics-reader
+subjects:
+  - kind: ServiceAccount
+    name: beszel
+    namespace: {{ include "iskander.namespace" . }}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: beszel
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: beszel
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "iskander.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: beszel
+  template:
+    metadata:
+      labels:
+        {{- include "iskander.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: beszel
+    spec:
+      serviceAccountName: beszel
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: beszel
+          image: {{ .Values.beszel.image.repository }}:{{ .Values.beszel.image.tag }}
+          env:
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: beszel-secrets
+                  key: admin-password
+            - name: MATTERMOST_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: beszel-secrets
+                  key: mattermost-webhook-url
+                  optional: true
+            - name: BESZEL_DATA_DIR
+              value: /data
+            # Alert thresholds
+            - name: ALERT_DISK_THRESHOLD
+              value: {{ .Values.beszel.alerts.diskThresholdPercent | default "80" | quote }}
+            - name: ALERT_MEMORY_THRESHOLD
+              value: {{ .Values.beszel.alerts.memoryThresholdPercent | default "90" | quote }}
+          ports:
+            - name: http
+              containerPort: 8090
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: config-scripts
+              mountPath: /scripts
+            # Read-only access to K3s node metrics via hostPath
+            - name: proc
+              mountPath: /host/proc
+              readOnly: true
+          resources:
+            {{- toYaml .Values.beszel.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: beszel-data
+        - name: config-scripts
+          configMap:
+            name: beszel-config
+            defaultMode: 0755
+        - name: proc
+          hostPath:
+            path: /proc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: beszel
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: beszel
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "iskander.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: beszel
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-beszel
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: beszel
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Traefik (admin access only)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 8090
+  egress:
+    # K3s API server for metrics
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - port: 6443
+    # Mattermost webhook alerts
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: mattermost
+      ports:
+        - port: 8065
+
+---
+{{- if .Values.beszel.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: beszel
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    # Protect with Authentik forward-auth — monitoring UI should not be public
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ include "iskander.namespace" . }}-authentik-proxy@kubernetescrd"
+    {{- with .Values.beszel.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  ingressClassName: traefik
+  {{- if .Values.beszel.ingress.tls }}
+  tls:
+    - hosts:
+        - {{ .Values.global.cooperative.domain | quote }}
+      secretName: beszel-tls
+  {{- end }}
+  rules:
+    - host: {{ .Values.global.cooperative.domain | quote }}
+      http:
+        paths:
+          - path: /monitor
+            pathType: Prefix
+            backend:
+              service:
+                name: beszel
+                port:
+                  name: http
+{{- end }}
+
+{{- end }}{{/* beszel.enabled */}}
