@@ -10,16 +10,16 @@ import { usePathname } from "next/navigation";
 import clsx from "clsx";
 
 const navItems = [
-  { href: "/", label: "Home", icon: "🏠" },
-  { href: "/identity", label: "Identity", icon: "🪪" },
-  { href: "/governance", label: "Governance", icon: "🏛️" },
-  { href: "/deliberation", label: "Deliberation", icon: "💬" },
-  { href: "/treasury", label: "Treasury", icon: "💰" },
-  { href: "/ledger", label: "DisCO Ledger", icon: "📒" },
-  { href: "/escrow", label: "Escrow", icon: "🤝" },
-  { href: "/arbitration", label: "Arbitration", icon: "⚖️" },
-  { href: "/tasks", label: "Tasks", icon: "📋" },
-  { href: "/chat", label: "Agent Chat", icon: "🤖" },
+  { href: "/", label: "Home", icon: "🏠", ready: true },
+  { href: "/identity", label: "Identity", icon: "🪪", ready: true },
+  { href: "/governance", label: "Governance", icon: "🏛️", ready: true },
+  { href: "/deliberation", label: "Deliberation", icon: "💬", ready: true },
+  { href: "/treasury", label: "Treasury", icon: "💰", ready: true },
+  { href: "/ledger", label: "DisCO Ledger", icon: "📒", ready: false },
+  { href: "/escrow", label: "Escrow", icon: "🤝", ready: true },
+  { href: "/arbitration", label: "Arbitration", icon: "⚖️", ready: false },
+  { href: "/tasks", label: "Tasks", icon: "📋", ready: false },
+  { href: "/chat", label: "Agent Chat", icon: "🤖", ready: true },
 ];
 
 export function Sidebar() {
@@ -33,21 +33,31 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 space-y-1">
-        {navItems.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={clsx(
-              "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors",
-              pathname === item.href
-                ? "bg-iskander-800 text-iskander-100"
-                : "text-iskander-400 hover:bg-iskander-900 hover:text-iskander-200"
-            )}
-          >
-            <span className="text-base">{item.icon}</span>
-            <span>{item.label}</span>
-          </Link>
-        ))}
+        {navItems.map((item) =>
+          item.ready ? (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={clsx(
+                "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors",
+                pathname === item.href
+                  ? "bg-iskander-800 text-iskander-100"
+                  : "text-iskander-400 hover:bg-iskander-900 hover:text-iskander-200"
+              )}
+            >
+              <span className="text-base">{item.icon}</span>
+              <span>{item.label}</span>
+            </Link>
+          ) : (
+            <span
+              key={item.href}
+              className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm opacity-40 cursor-default"
+            >
+              <span className="text-base">{item.icon}</span>
+              <span>{item.label} (soon)</span>
+            </span>
+          )
+        )}
       </nav>
 
       <div className="mt-auto pt-4 border-t border-iskander-800">
