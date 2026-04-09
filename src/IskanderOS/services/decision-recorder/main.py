@@ -7,6 +7,11 @@ Endpoints:
   GET  /log                     Glass Box: query audit trail (member-readable)
   GET  /decisions               List recorded decisions
   GET  /decisions/{id}          Single decision with IPFS CID
+  PATCH /decisions/{id}/review  Set review date on an agreement (S3: Evolve Agreements)
+  GET  /decisions/reviews/due   Agreements due for review
+  POST /tensions                Log an organisational tension (S3: Navigate Via Tension)
+  GET  /tensions                List tensions
+  PATCH /tensions/{id}          Update tension status / driver statement
   GET  /health                  Service health
 """
 from __future__ import annotations
@@ -18,7 +23,7 @@ import logging
 import os
 import time
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
@@ -26,7 +31,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from . import ipfs
-from .db import Decision, GlassBoxEntry, SessionLocal, create_tables, get_db
+from .db import Decision, GlassBoxEntry, SessionLocal, Tension, create_tables, get_db
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
 logger = logging.getLogger("decision-recorder")
@@ -335,6 +340,177 @@ def get_decision(
 
 
 # ---------------------------------------------------------------------------
+# Agreement review scheduling (S3: Evaluate and Evolve Agreements)
+# ---------------------------------------------------------------------------
+
+class ReviewUpdateRequest(BaseModel):
+    review_date: str = Field(..., description="ISO 8601 date YYYY-MM-DD")
+    review_circle: str | None = Field(None, description="Loomio group key responsible")
+
+    @field_validator("review_date")
+    @classmethod
+    def parse_date(cls, v: str) -> str:
+        try:
+            date.fromisoformat(v)
+        except ValueError:
+            raise ValueError("review_date must be YYYY-MM-DD")
+        return v
+
+
+@app.patch("/decisions/{decision_id}/review")
+def set_review_date(
+    decision_id: int,
+    body: ReviewUpdateRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict:
+    """Set or update the review date on a recorded agreement."""
+    _verify_internal_caller(request)
+    d = db.query(Decision).filter(Decision.id == decision_id).first()
+    if not d:
+        raise HTTPException(status_code=404, detail="Decision not found")
+    d.review_date = date.fromisoformat(body.review_date)
+    if body.review_circle:
+        d.review_circle = body.review_circle
+    d.review_status = "pending"
+    db.commit()
+    return {"id": d.id, "review_date": str(d.review_date), "review_circle": d.review_circle}
+
+
+@app.get("/decisions/reviews/due")
+def list_due_reviews(
+    request: Request,
+    days_ahead: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+) -> dict:
+    """List agreements whose review date falls within the next N days."""
+    client_host = request.client.host if request.client else "unknown"
+    _rate_check(f"decisions:{client_host}", _QUERY_MAX)
+
+    cutoff = date.today()
+    from datetime import timedelta
+    future = cutoff + timedelta(days=days_ahead)
+
+    due = (
+        db.query(Decision)
+        .filter(
+            Decision.review_date.isnot(None),
+            Decision.review_date <= future,
+            Decision.review_status != "complete",
+        )
+        .order_by(Decision.review_date)
+        .all()
+    )
+    return {
+        "count": len(due),
+        "days_ahead": days_ahead,
+        "reviews": [
+            {
+                "id": d.id,
+                "title": d.title,
+                "review_date": str(d.review_date),
+                "review_circle": d.review_circle,
+                "review_status": d.review_status,
+                "loomio_url": d.loomio_url,
+            }
+            for d in due
+        ],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Tension tracking (S3: Navigate Via Tension)
+# ---------------------------------------------------------------------------
+
+class TensionCreateRequest(BaseModel):
+    description: str = Field(..., description="What the member noticed", max_length=5_000)
+    domain: str | None = Field(None, description="Circle or group this relates to", max_length=128)
+    driver_statement: str | None = Field(None, description="Optional S3 driver statement", max_length=2_000)
+    logged_by: str = Field(..., description="Mattermost user ID", max_length=128)
+
+
+class TensionUpdateRequest(BaseModel):
+    status: str | None = Field(None, description="open | in_progress | resolved")
+    driver_statement: str | None = Field(None, max_length=2_000)
+    loomio_discussion_id: int | None = None
+
+    @field_validator("status")
+    @classmethod
+    def valid_status(cls, v: str | None) -> str | None:
+        if v and v not in ("open", "in_progress", "resolved"):
+            raise ValueError("status must be open, in_progress, or resolved")
+        return v
+
+
+@app.post("/tensions", status_code=status.HTTP_201_CREATED)
+def log_tension(
+    body: TensionCreateRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict:
+    """Log an organisational tension for structured processing."""
+    _verify_internal_caller(request)
+    tension = Tension(
+        logged_by=body.logged_by,
+        description=body.description,
+        domain=body.domain,
+        driver_statement=body.driver_statement,
+    )
+    db.add(tension)
+    db.commit()
+    db.refresh(tension)
+    logger.info("Tension logged by %s: %.60s", body.logged_by, body.description)
+    return _tension_summary(tension)
+
+
+@app.get("/tensions")
+def list_tensions(
+    request: Request,
+    status_filter: str | None = Query(None, alias="status"),
+    logged_by: str | None = Query(None),
+    limit: int = Query(20, le=100),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+) -> dict:
+    """List logged tensions."""
+    client_host = request.client.host if request.client else "unknown"
+    _rate_check(f"decisions:{client_host}", _QUERY_MAX)
+
+    q = db.query(Tension).order_by(Tension.logged_at.desc())
+    if status_filter:
+        q = q.filter(Tension.status == status_filter)
+    if logged_by:
+        q = q.filter(Tension.logged_by == logged_by)
+    total = q.count()
+    tensions = q.offset(offset).limit(limit).all()
+    return {"total": total, "tensions": [_tension_summary(t) for t in tensions]}
+
+
+@app.patch("/tensions/{tension_id}")
+def update_tension(
+    tension_id: int,
+    body: TensionUpdateRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict:
+    """Update tension status, driver statement, or linked discussion."""
+    _verify_internal_caller(request)
+    t = db.query(Tension).filter(Tension.id == tension_id).first()
+    if not t:
+        raise HTTPException(status_code=404, detail="Tension not found")
+    if body.status:
+        t.status = body.status
+        if body.status == "resolved" and not t.resolved_at:
+            t.resolved_at = datetime.now(timezone.utc)
+    if body.driver_statement is not None:
+        t.driver_statement = body.driver_statement
+    if body.loomio_discussion_id is not None:
+        t.loomio_discussion_id = body.loomio_discussion_id
+    db.commit()
+    return _tension_summary(t)
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -351,6 +527,20 @@ def _verify_internal_caller(request: Request) -> None:
         raise HTTPException(status_code=401, detail="Internal service token required")
     if not hmac.compare_digest(auth[7:], INTERNAL_SERVICE_TOKEN):
         raise HTTPException(status_code=403, detail="Invalid service token")
+
+
+def _tension_summary(t: Tension) -> dict:
+    return {
+        "id": t.id,
+        "logged_by": t.logged_by,
+        "description": t.description,
+        "domain": t.domain,
+        "driver_statement": t.driver_statement,
+        "status": t.status,
+        "loomio_discussion_id": t.loomio_discussion_id,
+        "logged_at": t.logged_at.isoformat(),
+        "resolved_at": t.resolved_at.isoformat() if t.resolved_at else None,
+    }
 
 
 def _decision_summary(d: Decision) -> dict:
