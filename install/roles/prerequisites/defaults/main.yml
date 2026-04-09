@@ -1,0 +1,4 @@
+---
+iskander_namespace: iskander
+kubeconfig: /etc/rancher/k3s/k3s.yaml
+offline_mode: false

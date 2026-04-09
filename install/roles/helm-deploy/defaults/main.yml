@@ -1,0 +1,5 @@
+---
+iskander_namespace: iskander
+kubeconfig: /etc/rancher/k3s/k3s.yaml
+helm_chart_path: /opt/iskander/src/infra/helm/iskander
+values_output_path: /opt/iskander/generated-values.yaml
