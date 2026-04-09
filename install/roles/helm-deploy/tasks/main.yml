@@ -1,0 +1,61 @@
+---
+# helm-deploy role — installs or upgrades the Iskander Helm chart.
+# On first install: uses generated-values.yaml.
+# On upgrade: uses the existing values plus any new chart defaults.
+
+- name: Check if Iskander is already installed
+  command: helm -n "{{ iskander_namespace }}" status iskander
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: helm_status
+  failed_when: false
+  changed_when: false
+
+- name: Install Iskander (first install)
+  when: helm_status.rc != 0
+  command: >
+    helm install iskander {{ helm_chart_path }}
+    --namespace {{ iskander_namespace }}
+    --create-namespace
+    --values {{ values_output_path }}
+    --timeout 15m
+    --wait
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: helm_install
+
+- name: Upgrade Iskander (subsequent runs)
+  when: helm_status.rc == 0
+  command: >
+    helm upgrade iskander {{ helm_chart_path }}
+    --namespace {{ iskander_namespace }}
+    --reuse-values
+    --timeout 15m
+    --wait
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: helm_upgrade
+
+- name: Wait for all pods to be ready
+  command: >
+    kubectl -n {{ iskander_namespace }} wait pods
+    --all
+    --for=condition=Ready
+    --timeout=600s
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: pods_ready
+  retries: 3
+  delay: 30
+  until: pods_ready.rc == 0
+
+- name: Show pod status
+  command: kubectl -n "{{ iskander_namespace }}" get pods
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: pod_status
+  changed_when: false
+
+- name: Display pod status
+  debug:
+    msg: "{{ pod_status.stdout_lines }}"

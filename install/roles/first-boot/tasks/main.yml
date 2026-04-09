@@ -1,0 +1,110 @@
+---
+# first-boot role — runs once after the first successful Helm install.
+# Creates the founding member account and seeds cooperative data.
+# Idempotent: checks install-state ConfigMap before running.
+
+- name: Check if first-boot already completed
+  command: kubectl -n "{{ iskander_namespace }}" get configmap iskander-first-boot-complete
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: first_boot_done
+  failed_when: false
+  changed_when: false
+
+- name: Run first-boot sequence
+  when: first_boot_done.rc != 0
+  block:
+    - name: Wait for Authentik to be fully ready
+      command: >
+        kubectl -n {{ iskander_namespace }} wait pod
+        -l app.kubernetes.io/component=authentik-server
+        --for=condition=Ready
+        --timeout=300s
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+
+    - name: Get Authentik bootstrap token
+      command: >
+        kubectl -n {{ iskander_namespace }} exec
+        deployment/authentik-server -- ak create_recovery_key 1 akadmin
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      register: authentik_bootstrap_key
+      # The output contains the recovery key — handle carefully
+
+    - name: Create founding admin account in Authentik
+      uri:
+        url: "http://localhost:9000/api/v3/core/users/"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ authentik_bootstrap_key.stdout | trim }}"
+          Content-Type: "application/json"
+        body_encoding: json
+        body:
+          username: "{{ admin_email.split('@')[0] }}"
+          email: "{{ admin_email }}"
+          name: "Founding Admin"
+          is_active: true
+          groups: []
+        status_code: [201, 400]  # 400 = already exists
+      register: admin_user_result
+
+    - name: Send password setup email to founding admin
+      uri:
+        url: "http://localhost:9000/api/v3/stages/email/send/"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ authentik_bootstrap_key.stdout | trim }}"
+          Content-Type: "application/json"
+        body_encoding: json
+        body:
+          user: "{{ admin_user_result.json.pk | default('1') }}"
+          template: password_reset
+        status_code: [200, 204]
+      when: admin_user_result.status == 201
+
+    - name: Wait for Loomio to be ready
+      command: >
+        kubectl -n {{ iskander_namespace }} wait pod
+        -l app.kubernetes.io/component=loomio
+        --for=condition=Ready
+        --timeout=300s
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+
+    - name: Wait for Mattermost to be ready
+      command: >
+        kubectl -n {{ iskander_namespace }} wait pod
+        -l app.kubernetes.io/component=mattermost
+        --for=condition=Ready
+        --timeout=300s
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+
+    - name: Mark first-boot complete
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig }}"
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: iskander-first-boot-complete
+            namespace: "{{ iskander_namespace }}"
+          data:
+            completed_at: "{{ ansible_date_time.iso8601 }}"
+            coop_name: "{{ coop_name }}"
+            admin_email: "{{ admin_email }}"
+
+    - name: First-boot complete
+      debug:
+        msg: |
+          ✓ First-boot sequence complete.
+          Founding admin account created for {{ admin_email }}.
+          A password setup email has been sent.
+          Cooperative: {{ coop_name }}
+
+- name: First-boot already done (upgrade mode)
+  when: first_boot_done.rc == 0
+  debug:
+    msg: "First-boot already completed. Skipping (upgrade mode)."

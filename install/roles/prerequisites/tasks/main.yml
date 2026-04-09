@@ -1,0 +1,46 @@
+---
+# prerequisites role — verifies K3s, Helm, kubectl are available and ready
+
+- name: Check K3s is running
+  command: kubectl get nodes
+  environment:
+    KUBECONFIG: "{{ kubeconfig }}"
+  register: k3s_nodes
+  changed_when: false
+  failed_when: k3s_nodes.rc != 0
+
+- name: Show cluster nodes
+  debug:
+    msg: "Cluster ready: {{ k3s_nodes.stdout_lines }}"
+
+- name: Check Helm is available
+  command: helm version --short
+  register: helm_version
+  changed_when: false
+
+- name: Show Helm version
+  debug:
+    msg: "{{ helm_version.stdout }}"
+
+- name: Add Bitnami Helm repository (for PostgreSQL and Redis charts)
+  command: helm repo add bitnami https://charts.bitnami.com/bitnami
+  register: bitnami_add
+  changed_when: "'already exists' not in bitnami_add.stderr"
+  when: not offline_mode
+
+- name: Update Helm repositories
+  command: helm repo update
+  when: not offline_mode
+  changed_when: true
+
+- name: Create Iskander namespace
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ iskander_namespace }}"
+        labels:
+          kubernetes.io/metadata.name: "{{ iskander_namespace }}"

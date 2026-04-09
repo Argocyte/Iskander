@@ -45,3 +45,6 @@ loomio-wiki-complete.json
 
 # Skill archives (generated from source)
 *.skill
+# Iskander installer — generated secrets file (NEVER commit)
+install/generated-values.yaml
+/opt/iskander/generated-values.yaml
