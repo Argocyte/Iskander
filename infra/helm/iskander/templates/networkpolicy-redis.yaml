@@ -1,0 +1,24 @@
+{{- if .Values.redis.enabled }}
+# Allow services with label iskander.coop/db-access: redis to reach Redis.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-redis
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: redis
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              iskander.coop/db-access: redis
+      ports:
+        - port: 6379
+          protocol: TCP
+{{- end }}

@@ -1,0 +1,35 @@
+# Minimal profile — 8 GB RAM (tight, single-node only)
+# Suitable for testing or cooperatives with very constrained hardware.
+# Not recommended for production; upgrade to values-standard.yaml when possible.
+
+namespace:
+  resourceQuota:
+    hard:
+      requests.cpu: "2"
+      requests.memory: "4Gi"
+      limits.cpu: "4"
+      limits.memory: "6Gi"
+
+postgresql:
+  primary:
+    persistence:
+      size: 5Gi
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "50m"
+      limits:
+        memory: "256Mi"
+        cpu: "250m"
+
+redis:
+  master:
+    persistence:
+      size: 512Mi
+    resources:
+      requests:
+        memory: "32Mi"
+        cpu: "25m"
+      limits:
+        memory: "64Mi"
+        cpu: "100m"
