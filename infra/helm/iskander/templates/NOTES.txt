@@ -1,0 +1,34 @@
+Iskander {{ .Chart.AppVersion }} deployed to namespace '{{ include "iskander.namespace" . }}'.
+
+Cooperative: {{ .Values.global.cooperative.name }}
+
+Data layer:
+{{- if .Values.postgresql.enabled }}
+  PostgreSQL: {{ include "iskander.postgresql.host" . }}:{{ .Values.global.postgresql.port }}
+{{- end }}
+{{- if .Values.redis.enabled }}
+  Redis:      {{ include "iskander.redis.host" . }}:{{ .Values.global.redis.port }}
+{{- end }}
+
+Next steps:
+  1. Enable Authentik SSO:
+       helm upgrade iskander infra/helm/iskander \
+         --reuse-values \
+         --set authentik.enabled=true
+
+  2. Enable Loomio (requires Authentik first):
+       helm upgrade iskander infra/helm/iskander \
+         --reuse-values \
+         --set loomio.enabled=true
+
+  3. Enable Mattermost:
+       helm upgrade iskander infra/helm/iskander \
+         --reuse-values \
+         --set mattermost.enabled=true
+
+Or install all Phase C services at once:
+  helm upgrade iskander infra/helm/iskander \
+    --values infra/helm/iskander/values-standard.yaml \
+    --values infra/helm/iskander/values-phase-c.yaml
+
+See docs/roadmap.md for the full Phase C task list.

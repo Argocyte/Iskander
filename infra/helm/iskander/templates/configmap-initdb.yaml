@@ -1,0 +1,14 @@
+{{- if .Values.postgresql.enabled }}
+# ConfigMap containing init.sql, mounted into the PostgreSQL initdb hook.
+# Creates all per-service databases and roles in a single idempotent pass.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: iskander-initdb
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+data:
+  init.sql: |
+    {{ .Files.Get "files/init.sql" | nindent 4 }}
+{{- end }}
