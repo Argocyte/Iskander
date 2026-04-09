@@ -146,6 +146,48 @@ authentik:
 
 loomio:
   enabled: false
+  image:
+    repository: loomio/loomio
+    tag: "v2.23.0"            # pin; update intentionally
+
+  # MUST be overridden by install script
+  secretKeyBase: ""
+  webhookSecret: ""           # shared secret for HMAC verification in decision-recorder
+
+  postgresql:
+    password: ""
+
+  oidc:
+    clientSecret: ""          # populated from Authentik bootstrap output
+
+  smtp:
+    host: ""
+    port: 587
+    useTLS: true
+    password: ""
+
+  uploadStorage: "5Gi"
+
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "200m"
+    limits:
+      memory: "1.5Gi"
+      cpu: "1000m"
+
+  workerResources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+  ingress:
+    enabled: true
+    tls: true
+    annotations: {}
 
 mattermost:
   enabled: false
