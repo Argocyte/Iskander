@@ -3,10 +3,13 @@ Clerk agent tool implementations.
 
 Each tool maps to a real API call. Before any tool that writes to external
 systems, glass_box_log() MUST be called. This is enforced in agent.py.
+
+Thread safety: all HTTP calls use per-request httpx.Client instances.
+FastAPI serves concurrent requests in different threads; a shared client
+can cause request mixing under concurrent load.
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import os
@@ -23,7 +26,17 @@ MATTERMOST_BASE = os.environ["MATTERMOST_URL"].rstrip("/")
 MATTERMOST_BOT_TOKEN = os.environ["MATTERMOST_BOT_TOKEN"]
 GLASS_BOX_BASE = os.environ.get("GLASS_BOX_URL", "http://decision-recorder:3000")
 
-_http = httpx.Client(timeout=15)
+# Configurable timeout — cooperative networks may have higher latency
+_TIMEOUT = float(os.environ.get("CLERK_HTTP_TIMEOUT", "30"))
+
+# Input validation limits
+_MAX_TITLE_LEN = 200
+_MAX_DESCRIPTION_LEN = 10_000
+
+
+def _http_client() -> httpx.Client:
+    """Return a fresh per-request httpx.Client. Always use as a context manager."""
+    return httpx.Client(timeout=_TIMEOUT)
 
 
 # ---------------------------------------------------------------------------
@@ -50,9 +63,10 @@ def glass_box_log(
         "reasoning": reasoning,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
-    resp = _http.post(f"{GLASS_BOX_BASE}/log", json=payload)
-    resp.raise_for_status()
-    return resp.json()
+    with _http_client() as client:
+        resp = client.post(f"{GLASS_BOX_BASE}/log", json=payload)
+        resp.raise_for_status()
+        return resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -60,13 +74,14 @@ def glass_box_log(
 # ---------------------------------------------------------------------------
 
 def _loomio_get(path: str, params: dict | None = None) -> Any:
-    resp = _http.get(
-        f"{LOOMIO_BASE}/api/v1/{path}",
-        params=params,
-        headers={"Authorization": f"Token {LOOMIO_API_KEY}"},
-    )
-    resp.raise_for_status()
-    return resp.json()
+    with _http_client() as client:
+        resp = client.get(
+            f"{LOOMIO_BASE}/api/v1/{path}",
+            params=params,
+            headers={"Authorization": f"Token {LOOMIO_API_KEY}"},
+        )
+        resp.raise_for_status()
+        return resp.json()
 
 
 def loomio_list_proposals(group_key: str | None = None) -> list[dict]:
@@ -151,13 +166,31 @@ def loomio_search(query: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 def _loomio_post(path: str, payload: dict) -> Any:
-    resp = _http.post(
-        f"{LOOMIO_BASE}/api/v1/{path}",
-        json=payload,
-        headers={"Authorization": f"Token {LOOMIO_API_KEY}"},
-    )
-    resp.raise_for_status()
-    return resp.json()
+    with _http_client() as client:
+        resp = client.post(
+            f"{LOOMIO_BASE}/api/v1/{path}",
+            json=payload,
+            headers={"Authorization": f"Token {LOOMIO_API_KEY}"},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+def _verify_group_membership(actor_user_id: str, group_key: str) -> None:
+    """
+    Verify the actor is a member of the target Loomio group.
+    Raises ValueError if not a member, preventing cross-cooperative posting.
+    """
+    data = _loomio_get("memberships", {"actor_id": actor_user_id})
+    member_groups = {
+        m.get("group", {}).get("key")
+        for m in data.get("memberships", [])
+    }
+    if group_key not in member_groups:
+        raise ValueError(
+            f"You are not a member of group '{group_key}'. "
+            "Discussions can only be created in groups you belong to."
+        )
 
 
 def loomio_create_discussion(
@@ -170,11 +203,23 @@ def loomio_create_discussion(
     """
     Create a new discussion thread in Loomio.
     Glass Box MUST be called before this function.
+    Verifies the actor is a member of the target group.
     """
+    # Input validation
+    if len(title) > _MAX_TITLE_LEN:
+        raise ValueError(f"Title must be {_MAX_TITLE_LEN} characters or fewer.")
+    if len(description) > _MAX_DESCRIPTION_LEN:
+        raise ValueError(f"Description must be {_MAX_DESCRIPTION_LEN} characters or fewer.")
+    if not title.strip():
+        raise ValueError("Title cannot be empty.")
+
+    # Verify the actor is a member of this group (prevents cross-cooperative posting)
+    _verify_group_membership(actor_user_id, group_key)
+
     data = _loomio_post("discussions", {
         "discussion": {
             "group_key": group_key,
-            "title": title,
+            "title": title.strip(),
             "description": description,
             "private": True,
         }
@@ -217,13 +262,14 @@ def loomio_create_proposal_draft(
 # ---------------------------------------------------------------------------
 
 def _mm_post(path: str, payload: dict) -> Any:
-    resp = _http.post(
-        f"{MATTERMOST_BASE}/api/v4/{path}",
-        json=payload,
-        headers={"Authorization": f"Bearer {MATTERMOST_BOT_TOKEN}"},
-    )
-    resp.raise_for_status()
-    return resp.json()
+    with _http_client() as client:
+        resp = client.post(
+            f"{MATTERMOST_BASE}/api/v4/{path}",
+            json=payload,
+            headers={"Authorization": f"Bearer {MATTERMOST_BOT_TOKEN}"},
+        )
+        resp.raise_for_status()
+        return resp.json()
 
 
 def mattermost_post_message(*, channel_id: str, message: str) -> dict:
@@ -231,6 +277,8 @@ def mattermost_post_message(*, channel_id: str, message: str) -> dict:
     Post a message to a Mattermost channel.
     Glass Box MUST be called before this function.
     """
+    if len(message) > 16_383:  # Mattermost hard limit
+        raise ValueError("Message too long. Split it into shorter messages.")
     data = _mm_post("posts", {"channel_id": channel_id, "message": message})
     return {"post_id": data["id"], "create_at": data["create_at"]}
 
