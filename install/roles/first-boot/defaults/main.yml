@@ -1,0 +1,6 @@
+---
+iskander_namespace: iskander
+kubeconfig: /etc/rancher/k3s/k3s.yaml
+coop_name: "My Cooperative"
+admin_email: ""
+domain: ""
