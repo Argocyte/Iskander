@@ -430,6 +430,7 @@ class TensionCreateRequest(BaseModel):
 
 
 class TensionUpdateRequest(BaseModel):
+    updated_by: str = Field(..., description="Mattermost user ID of the member making the update", max_length=128)
     status: str | None = Field(None, description="open | in_progress | resolved")
     driver_statement: str | None = Field(None, max_length=2_000)
     loomio_discussion_id: int | None = None
@@ -467,20 +468,24 @@ def log_tension(
 def list_tensions(
     request: Request,
     status_filter: str | None = Query(None, alias="status"),
-    logged_by: str | None = Query(None),
     limit: int = Query(20, le=100),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ) -> dict:
-    """List logged tensions."""
+    """
+    List logged tensions.
+
+    The logged_by filter has been removed (#64): it allowed any caller to
+    enumerate tensions by any user ID without an ownership check. All tensions
+    in a cooperative are visible to all members via the Clerk; per-user
+    filtering with RBAC is planned for Phase B.
+    """
     client_host = request.client.host if request.client else "unknown"
     _rate_check(f"decisions:{client_host}", _QUERY_MAX)
 
     q = db.query(Tension).order_by(Tension.logged_at.desc())
     if status_filter:
         q = q.filter(Tension.status == status_filter)
-    if logged_by:
-        q = q.filter(Tension.logged_by == logged_by)
     total = q.count()
     tensions = q.offset(offset).limit(limit).all()
     return {"total": total, "tensions": [_tension_summary(t) for t in tensions]}
@@ -493,11 +498,21 @@ def update_tension(
     request: Request,
     db: Session = Depends(get_db),
 ) -> dict:
-    """Update tension status, driver statement, or linked discussion."""
+    """
+    Update tension status, driver statement, or linked discussion.
+
+    Ownership enforced (#63): only the member who logged the tension may update it.
+    Phase B will add a facilitator-override path when circle roles are implemented.
+    """
     _verify_internal_caller(request)
     t = db.query(Tension).filter(Tension.id == tension_id).first()
     if not t:
         raise HTTPException(status_code=404, detail="Tension not found")
+    if t.logged_by != body.updated_by:
+        raise HTTPException(
+            status_code=403,
+            detail="Only the member who logged this tension may update it.",
+        )
     if body.status:
         t.status = body.status
         if body.status == "resolved" and not t.resolved_at:
