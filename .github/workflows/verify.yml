@@ -51,9 +51,9 @@ jobs:
   smoke-tests:
     name: Smoke tests (K3d cluster)
     runs-on: ubuntu-latest
-    # Only run on pushes to main or manual dispatch — not on every feature branch PR
-    # to preserve CI minutes. Use 'needs: unit-tests' to gate on unit test success.
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    # Run on pushes to main, PRs targeting main, or manual dispatch.
+    # Gated on unit-tests to avoid spinning up K3d when unit tests already fail.
+    if: github.ref == 'refs/heads/main' || github.base_ref == 'main' || github.event_name == 'workflow_dispatch'
     needs: unit-tests
 
     steps:
