@@ -1,0 +1,351 @@
+{{- if .Values.nextcloud.enabled }}
+# ---------------------------------------------------------------------------
+# Nextcloud — shared files, calendar, and contacts
+# Members use this for cooperative documents and scheduling.
+# The Clerk agent saves decision attachments here automatically.
+# ---------------------------------------------------------------------------
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: nextcloud-secrets
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: nextcloud
+type: Opaque
+stringData:
+  admin-password: {{ .Values.nextcloud.adminPassword | quote }}
+  postgresql-password: {{ .Values.nextcloud.postgresql.password | quote }}
+  redis-password: {{ .Values.global.redis.auth.password | quote }}
+  oidc-client-secret: {{ .Values.nextcloud.oidc.clientSecret | quote }}
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nextcloud-config
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: nextcloud
+data:
+  NEXTCLOUD_TRUSTED_DOMAINS: {{ .Values.global.cooperative.domain | quote }}
+  NEXTCLOUD_ADMIN_USER: "admin"
+  POSTGRES_HOST: {{ include "iskander.postgresql.host" . | quote }}
+  POSTGRES_DB: "nextcloud"
+  POSTGRES_USER: "nextcloud"
+  REDIS_HOST: {{ include "iskander.redis.host" . | quote }}
+  REDIS_HOST_PORT: {{ .Values.global.redis.port | toString | quote }}
+  REDIS_HOST_PASSWORD: ""       # injected via env from secret
+  # OIDC via Authentik (user_oidc app)
+  NC_oidc_provider_url: {{ printf "https://%s/application/o/nextcloud/" .Values.global.cooperative.domain | quote }}
+  NC_oidc_client_id: "nextcloud"
+  NC_oidc_scopes: "openid profile email"
+  NC_oidc_auto_provision_user: "1"
+  NC_oidc_update_user_on_login: "1"
+  # Disable local login — SSO only
+  NC_allow_user_to_change_display_name: "false"
+  # PHP memory
+  PHP_MEMORY_LIMIT: "512M"
+  PHP_UPLOAD_LIMIT: "512M"
+
+---
+# Nextcloud requires a custom config file for some settings not exposed via env.
+# This is mounted into /var/www/html/config/iskander.config.php
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nextcloud-php-config
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: nextcloud
+data:
+  iskander.config.php: |
+    <?php
+    $CONFIG = [
+      'default_phone_region' => 'GB',
+      'overwrite.cli.url' => 'https://{{ .Values.global.cooperative.domain }}',
+      'overwriteprotocol' => 'https',
+      // Disable signup — members join via Authentik invitation
+      'allow_user_to_change_display_name' => false,
+      'lost_password_link' => 'disabled',
+      // Log to stdout (captured by K3s)
+      'log_type' => 'errorlog',
+      'loglevel' => 2,
+      // Skeleton — new members get the Governance folder pre-populated
+      'skeletondirectory' => '/var/www/html/core/skeleton',
+    ];
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nextcloud-data
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: nextcloud
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ .Values.global.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.nextcloud.dataStorage | default "20Gi" }}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nextcloud
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: nextcloud
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "iskander.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: nextcloud
+  template:
+    metadata:
+      labels:
+        {{- include "iskander.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: nextcloud
+        iskander.coop/db-access: postgresql
+        iskander.coop/db-access-redis: "true"
+        iskander.coop/oidc-client: authentik
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 33              # www-data in the Nextcloud image
+        fsGroup: 33
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # Install and enable required apps before first start
+        - name: install-apps
+          image: {{ .Values.nextcloud.image.repository }}:{{ .Values.nextcloud.image.tag }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              # Wait until Nextcloud is installed (data dir exists)
+              until [ -f /var/www/html/config/config.php ]; do
+                echo "Waiting for Nextcloud installation..."
+                sleep 5
+              done
+              php occ app:enable user_oidc --no-interaction || true
+              php occ app:enable calendar --no-interaction || true
+              php occ app:enable contacts --no-interaction || true
+              php occ app:disable firstrunwizard --no-interaction || true
+              # Configure OIDC provider
+              php occ user_oidc:provider Iskander \
+                --clientid="nextcloud" \
+                --clientsecret="${OIDC_CLIENT_SECRET}" \
+                --discoveryuri="https://${DOMAIN}/application/o/nextcloud/.well-known/openid-configuration" \
+                --mapping-uid="preferred_username" \
+                --unique-uid=1 \
+                --check-bearer=0 \
+                --send-id-token-hint=0 || true
+              echo "App installation complete."
+          env:
+            - name: DOMAIN
+              value: {{ .Values.global.cooperative.domain | quote }}
+            - name: OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: nextcloud-secrets
+                  key: oidc-client-secret
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nextcloud-secrets
+                  key: postgresql-password
+          envFrom:
+            - configMapRef:
+                name: nextcloud-config
+          volumeMounts:
+            - name: data
+              mountPath: /var/www/html
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+      containers:
+        - name: nextcloud
+          image: {{ .Values.nextcloud.image.repository }}:{{ .Values.nextcloud.image.tag }}
+          envFrom:
+            - configMapRef:
+                name: nextcloud-config
+          env:
+            - name: NEXTCLOUD_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nextcloud-secrets
+                  key: admin-password
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nextcloud-secrets
+                  key: postgresql-password
+            - name: REDIS_HOST_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nextcloud-secrets
+                  key: redis-password
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /status.php
+              port: http
+              httpHeaders:
+                - name: Host
+                  value: {{ .Values.global.cooperative.domain | quote }}
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /status.php
+              port: http
+              httpHeaders:
+                - name: Host
+                  value: {{ .Values.global.cooperative.domain | quote }}
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /var/www/html
+            - name: php-config
+              mountPath: /var/www/html/config/iskander.config.php
+              subPath: iskander.config.php
+          resources:
+            {{- toYaml .Values.nextcloud.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+              add: ["CHOWN", "DAC_OVERRIDE", "FOWNER"]   # required for web server file ops
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: nextcloud-data
+        - name: php-config
+          configMap:
+            name: nextcloud-php-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nextcloud
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: nextcloud
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "iskander.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: nextcloud
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-nextcloud
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: nextcloud
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 80
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: openclaw
+      ports:
+        - port: 80
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgresql
+      ports:
+        - port: 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: redis
+      ports:
+        - port: 6379
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: authentik-server
+      ports:
+        - port: 9000
+
+---
+{{- if .Values.nextcloud.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nextcloud
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    # WebDAV and large file uploads need a higher body size limit
+    traefik.ingress.kubernetes.io/router.middlewares: "{{ include "iskander.namespace" . }}-nextcloud-headers@kubernetescrd"
+    {{- with .Values.nextcloud.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  ingressClassName: traefik
+  {{- if .Values.nextcloud.ingress.tls }}
+  tls:
+    - hosts:
+        - {{ .Values.global.cooperative.domain | quote }}
+      secretName: nextcloud-tls
+  {{- end }}
+  rules:
+    - host: {{ .Values.global.cooperative.domain | quote }}
+      http:
+        paths:
+          - path: /files
+            pathType: Prefix
+            backend:
+              service:
+                name: nextcloud
+                port:
+                  name: http
+{{- end }}
+
+{{- end }}{{/* nextcloud.enabled */}}

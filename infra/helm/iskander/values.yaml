@@ -221,6 +221,32 @@ mattermost:
 
 nextcloud:
   enabled: false
+  image:
+    repository: nextcloud
+    tag: "28.0.4-apache"      # pin; update intentionally
+
+  adminPassword: ""           # populated by install script
+
+  postgresql:
+    password: ""
+
+  oidc:
+    clientSecret: ""
+
+  dataStorage: "20Gi"
+
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+  ingress:
+    enabled: true
+    tls: true
+    annotations: {}
 
 openclaw:
   enabled: false
