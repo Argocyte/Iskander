@@ -1,0 +1,27 @@
+---
+# Iskander Ansible playbook — provisions a cooperative node on a fresh Linux host.
+# Idempotent: safe to run multiple times (upgrades are handled by helm upgrade).
+#
+# Variables (passed from install.sh via --extra-vars):
+#   coop_name        Cooperative name
+#   admin_email      Founding admin email
+#   domain           Public domain (empty string = Cloudflare tunnel)
+#   offline_mode     true/false — skip image pulls
+#   kubeconfig       Path to K3s kubeconfig
+
+- name: Iskander cooperative node setup
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  vars:
+    iskander_namespace: iskander
+    helm_chart_path: "{{ playbook_dir }}/../infra/helm/iskander"
+    values_output_path: /opt/iskander/generated-values.yaml
+    domain: "{{ domain | default('') }}"
+    offline_mode: "{{ offline_mode | default(false) | bool }}"
+
+  roles:
+    - role: prerequisites
+    - role: secrets
+    - role: helm-deploy
+    - role: first-boot
