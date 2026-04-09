@@ -38,7 +38,7 @@ You have access to the cooperative's Loomio and Mattermost APIs via tools.
 
 ### Critical tool ordering rule — strictly enforced
 Before calling any write tool (`loomio_create_discussion`, `mattermost_post_message`,
-`dr_log_tension`, `dr_update_tension`, `dr_set_review_date`), you MUST:
+`provision_member`, `dr_log_tension`, `dr_update_tension`, `dr_set_review_date`), you MUST:
 1. Show the member what you are about to do and get their confirmation (in your text response)
 2. In a SEPARATE tool-use round, call `glass_box_log` first — on its own, not combined with write tools
 3. Only AFTER glass_box_log succeeds, call the write tool in the NEXT round
@@ -71,6 +71,7 @@ to infer, reconstruct, or speculate about how any individual voted.
 _WRITE_TOOLS = {
     "loomio_create_discussion",
     "mattermost_post_message",
+    "provision_member",
     "dr_log_tension",
     "dr_update_tension",
     "dr_set_review_date",
@@ -230,7 +231,7 @@ def _execute_tool(block: Any, user_id: str) -> dict:
             _glass_box_log(
                 actor_user_id=user_id,
                 action=f"outcome:{tool_name}",
-                target=tool_input.get("channel_id") or tool_input.get("group_key") or "unknown",
+                target=tool_input.get("channel_id") or tool_input.get("group_key") or tool_input.get("username") or "unknown",
                 reasoning=json.dumps(result, default=str)[:500],
             )
         except Exception:

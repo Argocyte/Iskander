@@ -26,6 +26,8 @@ MATTERMOST_BASE = os.environ["MATTERMOST_URL"].rstrip("/")
 MATTERMOST_BOT_TOKEN = os.environ["MATTERMOST_BOT_TOKEN"]
 GLASS_BOX_BASE = os.environ.get("GLASS_BOX_URL", "http://decision-recorder:3000")
 DECISION_RECORDER_BASE = os.environ.get("DECISION_RECORDER_URL", GLASS_BOX_BASE)
+PROVISIONER_BASE = os.environ.get("PROVISIONER_URL", "http://provisioner:3001")
+_INTERNAL_SERVICE_TOKEN = os.environ.get("INTERNAL_SERVICE_TOKEN", "")
 
 # Configurable timeout — cooperative networks may have higher latency
 _TIMEOUT = float(os.environ.get("CLERK_HTTP_TIMEOUT", "30"))
@@ -66,6 +68,45 @@ def glass_box_log(
     }
     with _http_client() as client:
         resp = client.post(f"{GLASS_BOX_BASE}/log", json=payload)
+        resp.raise_for_status()
+        return resp.json()
+
+
+# ---------------------------------------------------------------------------
+# Provisioner — member onboarding across Authentik, Loomio, and Mattermost
+# ---------------------------------------------------------------------------
+
+def provision_member(
+    *,
+    username: str,
+    email: str,
+    display_name: str = "",
+) -> dict[str, Any]:
+    """
+    Provision a new cooperative member across Authentik, Loomio, and Mattermost.
+    Glass Box MUST be called before this function.
+    Returns provisioning status including the password reset URL.
+    """
+    if len(username) > 128:
+        raise ValueError("Username must be 128 characters or fewer.")
+    if len(email) > 256:
+        raise ValueError("Email must be 256 characters or fewer.")
+
+    payload = {
+        "username": username,
+        "email": email,
+        "display_name": display_name or username,
+    }
+    headers = {}
+    if _INTERNAL_SERVICE_TOKEN:
+        headers["Authorization"] = f"Bearer {_INTERNAL_SERVICE_TOKEN}"
+
+    with _http_client() as client:
+        resp = client.post(
+            f"{PROVISIONER_BASE}/members",
+            json=payload,
+            headers=headers,
+        )
         resp.raise_for_status()
         return resp.json()
 
@@ -636,6 +677,24 @@ TOOL_DEFINITIONS = [
             "required": ["channel_id", "message"],
         },
     },
+    {
+        "name": "provision_member",
+        "description": (
+            "Provision a new cooperative member across Authentik SSO, Loomio, and Mattermost. "
+            "REQUIRES glass_box_log to be called first. "
+            "REQUIRES explicit member confirmation before calling. "
+            "Returns a password reset URL to share with the new member."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "username": {"type": "string", "description": "Lowercase username (letters, numbers, hyphens, underscores only)"},
+                "email": {"type": "string", "description": "New member's email address"},
+                "display_name": {"type": "string", "description": "Display name (optional, defaults to username)"},
+            },
+            "required": ["username", "email"],
+        },
+    },
 ]
 
 # Map tool names to functions
@@ -649,6 +708,7 @@ TOOL_REGISTRY: dict[str, Any] = {
     "loomio_create_discussion": loomio_create_discussion,
     "loomio_create_proposal_draft": loomio_create_proposal_draft,
     "mattermost_post_message": mattermost_post_message,
+    "provision_member": provision_member,
     # S3 governance tools
     "dr_list_due_reviews": dr_list_due_reviews,
     "dr_list_tensions": dr_list_tensions,

@@ -35,6 +35,7 @@ data:
   LOOMIO_URL: {{ printf "http://loomio:80" | quote }}
   MATTERMOST_URL: {{ printf "http://mattermost:80" | quote }}
   GLASS_BOX_URL: {{ printf "http://decision-recorder:3000" | quote }}
+  PROVISIONER_URL: {{ printf "http://provisioner:3001" | quote }}
   CLERK_MODEL: {{ .Values.openclaw.clerkModel | default "claude-haiku-4-5-20251001" | quote }}
   MATTERMOST_GOVERNANCE_CHANNEL_ID: {{ .Values.openclaw.mattermost.governanceChannelId | default "" | quote }}
   MATTERMOST_BOT_USER_ID: {{ .Values.openclaw.mattermost.botUserId | default "" | quote }}
