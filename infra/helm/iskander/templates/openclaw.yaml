@@ -1,0 +1,207 @@
+{{- if .Values.openclaw.enabled }}
+# ---------------------------------------------------------------------------
+# OpenClaw — AI agent orchestrator
+# Hosts the Clerk agent, receives Mattermost bot events, and dispatches
+# Loomio decision notifications to #governance.
+# ---------------------------------------------------------------------------
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: openclaw-secrets
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: openclaw
+type: Opaque
+stringData:
+  anthropic-api-key: {{ .Values.openclaw.anthropicApiKey | quote }}
+  mattermost-bot-token: {{ .Values.openclaw.mattermost.botToken | quote }}
+  mattermost-webhook-token: {{ .Values.openclaw.mattermost.webhookToken | quote }}
+  loomio-api-key: {{ .Values.openclaw.loomio.apiKey | quote }}
+  loomio-webhook-secret: {{ .Values.loomio.webhookSecret | default "" | quote }}
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openclaw-config
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: openclaw
+data:
+  LOOMIO_URL: {{ printf "http://loomio:80" | quote }}
+  MATTERMOST_URL: {{ printf "http://mattermost:80" | quote }}
+  GLASS_BOX_URL: {{ printf "http://decision-recorder:3000" | quote }}
+  CLERK_MODEL: {{ .Values.openclaw.clerkModel | default "claude-haiku-4-5-20251001" | quote }}
+  MATTERMOST_GOVERNANCE_CHANNEL_ID: {{ .Values.openclaw.mattermost.governanceChannelId | default "" | quote }}
+  MATTERMOST_BOT_USER_ID: {{ .Values.openclaw.mattermost.botUserId | default "" | quote }}
+  LOG_LEVEL: {{ .Values.openclaw.logLevel | default "INFO" | quote }}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openclaw
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: openclaw
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "iskander.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: openclaw
+  template:
+    metadata:
+      labels:
+        {{- include "iskander.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: openclaw
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: openclaw
+          image: {{ .Values.openclaw.image.repository }}:{{ .Values.openclaw.image.tag }}
+          envFrom:
+            - configMapRef:
+                name: openclaw-config
+          env:
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-secrets
+                  key: anthropic-api-key
+            - name: MATTERMOST_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-secrets
+                  key: mattermost-bot-token
+            - name: MATTERMOST_OUTGOING_WEBHOOK_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-secrets
+                  key: mattermost-webhook-token
+            - name: LOOMIO_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-secrets
+                  key: loomio-api-key
+            - name: LOOMIO_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-secrets
+                  key: loomio-webhook-secret
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.openclaw.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openclaw
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: openclaw
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "iskander.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: openclaw
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+
+---
+# OpenClaw needs to reach Loomio, Mattermost, Nextcloud, and the Anthropic API
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-openclaw
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: openclaw
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Mattermost posts outgoing webhook events here
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: mattermost
+      ports:
+        - port: 8000
+    # Traefik (if admin wants to expose agent health externally)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 8000
+  egress:
+    # Loomio API
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: loomio
+      ports:
+        - port: 3000
+    # Mattermost API (posting responses)
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: mattermost
+      ports:
+        - port: 8065
+    # Decision recorder (Glass Box)
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: decision-recorder
+      ports:
+        - port: 3000
+    # Nextcloud (document operations)
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: nextcloud
+      ports:
+        - port: 80
+    # Anthropic API (internet egress)
+    - ports:
+        - port: 443
+
+{{- end }}{{/* openclaw.enabled */}}
