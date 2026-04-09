@@ -35,6 +35,16 @@ jobs:
           MATTERMOST_ONBOARDING_CHANNEL: chan-onboard
         run: python -m pytest tests/ -v
 
+      - name: Install steward-data deps
+        run: pip install -r src/IskanderOS/services/steward-data/requirements-test.txt
+
+      - name: Run steward-data tests
+        working-directory: src/IskanderOS/services/steward-data
+        env:
+          DATABASE_URL: "sqlite:///:memory:"
+          INTERNAL_SERVICE_TOKEN: test-token
+        run: python -m pytest tests/ -v
+
       - name: Install openclaw deps
         run: pip install anthropic httpx pytest
 
@@ -89,6 +99,8 @@ jobs:
             --set openclaw.loomio.apiKey=ci-loomio-key \
             --set provisioner.postgresql.password=${{ secrets.CI_PROV_PG_PASSWORD }} \
             --set provisioner.authentik.apiToken=${{ secrets.CI_AUTHENTIK_TOKEN }} \
+            --set stewardData.postgresql.password=${{ secrets.CI_STEWARD_DATA_PG_PASSWORD }} \
+            --set stewardData.internalServiceToken=ci-steward-token \
             --wait --timeout 300s || true
 
       - name: Wait for core services

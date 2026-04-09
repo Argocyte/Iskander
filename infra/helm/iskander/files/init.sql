@@ -88,3 +88,25 @@ END $$;
 
 CREATE DATABASE openclaw OWNER openclaw;
 GRANT ALL PRIVILEGES ON DATABASE openclaw TO openclaw;
+
+-- ---------------------------------------------------------------------------
+-- Iskander Ledger — cooperative treasury data (read-only for steward-data)
+-- ---------------------------------------------------------------------------
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'steward_data') THEN
+    CREATE ROLE steward_data WITH LOGIN PASSWORD 'STEWARD_DATA_DB_PASSWORD_PLACEHOLDER';
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'iskander_ledger') THEN
+    -- Treasurer role owns the DB and can write; steward_data gets SELECT only
+    CREATE DATABASE iskander_ledger;
+  END IF;
+END $$;
+
+-- steward_data: SELECT-only on all current and future tables
+\connect iskander_ledger
+GRANT CONNECT ON DATABASE iskander_ledger TO steward_data;
+GRANT USAGE ON SCHEMA public TO steward_data;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO steward_data;

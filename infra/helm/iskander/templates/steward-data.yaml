@@ -1,0 +1,155 @@
+{{- if .Values.stewardData.enabled }}
+# ---------------------------------------------------------------------------
+# Steward Data — read-only treasury data API for the Steward agent.
+# Provides: treasury summary, YTD surplus, activity log, compliance deadlines.
+# No write capability. No individual member financial data.
+# ---------------------------------------------------------------------------
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: steward-data-secrets
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: steward-data
+type: Opaque
+stringData:
+  postgresql-password: {{ .Values.stewardData.postgresql.password | quote }}
+  internal-service-token: {{ .Values.stewardData.internalServiceToken | default "" | quote }}
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: steward-data-config
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: steward-data
+data:
+  DATABASE_URL: {{ printf "postgresql+psycopg2://steward_data:$(STEWARD_DATA_DB_PASSWORD)@%s:%d/iskander_ledger" (include "iskander.postgresql.host" .) (.Values.global.postgresql.port | int) | quote }}
+  LOG_LEVEL: {{ .Values.stewardData.logLevel | default "INFO" | quote }}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: steward-data
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: steward-data
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "iskander.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: steward-data
+  template:
+    metadata:
+      labels:
+        {{- include "iskander.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: steward-data
+        iskander.coop/db-access: postgresql
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: steward-data
+          image: {{ .Values.stewardData.image.repository }}:{{ .Values.stewardData.image.tag }}
+          envFrom:
+            - configMapRef:
+                name: steward-data-config
+          env:
+            - name: STEWARD_DATA_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: steward-data-secrets
+                  key: postgresql-password
+            - name: INTERNAL_SERVICE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: steward-data-secrets
+                  key: internal-service-token
+                  optional: true
+          ports:
+            - name: http
+              containerPort: 4000
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.stewardData.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: steward-data
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+    app.kubernetes.io/component: steward-data
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "iskander.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: steward-data
+  ports:
+    - name: http
+      port: 4000
+      targetPort: http
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-steward-data
+  namespace: {{ include "iskander.namespace" . }}
+  labels:
+    {{- include "iskander.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: steward-data
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Only OpenClaw (Steward agent) may call this service.
+    # Members never access treasury data directly — it flows through the Steward.
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: openclaw
+      ports:
+        - port: 4000
+  egress:
+    # Read-only access to iskander_ledger database
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgresql
+      ports:
+        - port: 5432
+
+{{- end }}
