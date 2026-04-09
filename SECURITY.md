@@ -4,9 +4,7 @@
 
 If you discover a security vulnerability in Iskander, please report it responsibly.
 
-**Do NOT open a public GitHub issue for security vulnerabilities.**
-
-Instead, email: **security@argocyte.com**
+**Do NOT open a public GitHub issue for security vulnerabilities once Iskander is in operational use.**
 
 Include:
 - Description of the vulnerability
