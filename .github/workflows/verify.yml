@@ -19,7 +19,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install provisioner deps
-        run: pip install -r src/IskanderOS/services/provisioner/requirements.txt
+        run: pip install -r src/IskanderOS/services/provisioner/requirements-test.txt
 
       - name: Run provisioner tests
         working-directory: src/IskanderOS/services/provisioner
@@ -36,7 +36,7 @@ jobs:
         run: python -m pytest tests/ -v
 
       - name: Install openclaw deps
-        run: pip install anthropic httpx
+        run: pip install anthropic httpx pytest
 
       - name: Run openclaw tests
         working-directory: src/IskanderOS/openclaw
