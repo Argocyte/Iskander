@@ -75,6 +75,12 @@ jobs:
             --k3s-arg "--disable=traefik@server:*" \
             --wait --timeout 120s
 
+      - name: Fetch Helm dependencies
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo update
+          helm dependency build ./infra/helm/iskander
+
       - name: Deploy Iskander (CI values)
         run: |
           helm upgrade --install iskander ./infra/helm/iskander \
@@ -89,7 +95,7 @@ jobs:
             --set openclaw.loomio.apiKey=ci-loomio-key \
             --set provisioner.postgresql.password=${{ secrets.CI_PROV_PG_PASSWORD }} \
             --set provisioner.authentik.apiToken=${{ secrets.CI_AUTHENTIK_TOKEN }} \
-            --wait --timeout 300s || true
+            --wait --timeout 300s
 
       - name: Wait for core services
         run: |
