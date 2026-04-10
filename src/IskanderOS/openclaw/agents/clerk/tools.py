@@ -461,6 +461,62 @@ def dr_set_review_date(
         return resp.json()
 
 
+def log_labour(
+    *,
+    member_id: str,
+    value_type: str,
+    task_category: str,
+    hours: str,
+    timestamp_start: str,
+    task_description: str | None = None,
+    timestamp_end: str | None = None,
+    loomio_discussion_id: int | None = None,
+    notes: str | None = None,
+) -> dict:
+    """
+    Log a DisCO three-value-stream labour record (#91).
+    Glass Box MUST be called before this function.
+
+    value_type: productive | reproductive | care | commons
+    hours: decimal string e.g. '1.5' (minimum 0.25)
+    timestamp_start: ISO 8601 datetime
+    """
+    payload: dict = {
+        "member_id": member_id,
+        "value_type": value_type,
+        "task_category": task_category,
+        "hours": hours,
+        "timestamp_start": timestamp_start,
+    }
+    if task_description is not None:
+        payload["task_description"] = task_description
+    if timestamp_end is not None:
+        payload["timestamp_end"] = timestamp_end
+    if loomio_discussion_id is not None:
+        payload["loomio_discussion_id"] = loomio_discussion_id
+    if notes is not None:
+        payload["notes"] = notes
+    with _http_client() as client:
+        resp = client.post(f"{DECISION_RECORDER_BASE}/labour", json=payload)
+        resp.raise_for_status()
+        return resp.json()
+
+
+def get_labour_summary(member_id: str | None = None) -> dict:
+    """
+    Get labour totals by value type for a member or the whole cooperative.
+    Returns totals, care_ratio, and record_count.
+    Read-only — no Glass Box required.
+    """
+    params: dict = {}
+    if member_id:
+        params["member_id"] = member_id
+    with _http_client() as client:
+        resp = client.get(f"{DECISION_RECORDER_BASE}/labour/summary", params=params)
+        resp.raise_for_status()
+        return resp.json()
+
+
 def dr_update_accountability(
     *,
     decision_id: int,
@@ -836,6 +892,53 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "log_labour",
+        "description": (
+            "Log a DisCO three-value-stream labour record — makes invisible work visible. "
+            "REQUIRES glass_box_log to be called first. "
+            "Use when a member reports time they have spent on cooperative work. "
+            "value_type: 'productive' (deliverable work), 'reproductive' (maintaining conditions), "
+            "'care' (sustaining people/community), 'commons' (commons contributions). "
+            "hours: decimal string e.g. '1.5' (minimum 0.25)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "member_id": {"type": "string", "description": "Mattermost user ID of the contributor"},
+                "value_type": {
+                    "type": "string",
+                    "description": "productive | reproductive | care | commons",
+                },
+                "task_category": {
+                    "type": "string",
+                    "description": "Dot-notation category e.g. governance.facilitation, onboarding.welcome, code.review",
+                },
+                "hours": {"type": "string", "description": "Decimal hours worked e.g. '1.5' (min 0.25)"},
+                "timestamp_start": {"type": "string", "description": "ISO 8601 datetime when work began"},
+                "task_description": {"type": "string", "description": "Human-readable description (optional)"},
+                "timestamp_end": {"type": "string", "description": "ISO 8601 datetime when work ended (optional)"},
+                "loomio_discussion_id": {"type": "integer", "description": "Link to governance discussion if relevant (optional)"},
+                "notes": {"type": "string", "description": "Additional notes (optional)"},
+            },
+            "required": ["member_id", "value_type", "task_category", "hours", "timestamp_start"],
+        },
+    },
+    {
+        "name": "get_labour_summary",
+        "description": (
+            "Get labour totals by value type (productive/reproductive/care/commons) for a member or the whole cooperative. "
+            "Returns hours per type, total hours, and care_ratio. "
+            "Read-only — no Glass Box required. "
+            "Use to answer questions like 'How much care work has our cooperative done this month?'"
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "member_id": {"type": "string", "description": "Optional: scope to a specific member"},
+            },
+        },
+    },
+    {
         "name": "dr_update_accountability",
         "description": (
             "Update the accountability/implementation status on a recorded decision. "
@@ -940,6 +1043,8 @@ TOOL_REGISTRY: dict[str, Any] = {
     "dr_update_tension": dr_update_tension,
     "dr_set_review_date": dr_set_review_date,
     "dr_update_accountability": dr_update_accountability,
+    "log_labour": log_labour,
+    "get_labour_summary": get_labour_summary,
     # Meeting prep tools
     "list_recent_decisions": list_recent_decisions,
     "list_due_reviews": list_due_reviews,

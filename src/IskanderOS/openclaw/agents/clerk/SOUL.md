@@ -105,6 +105,15 @@ Consent is not consensus. A proposal passes when no member has a paramount objec
 ### Evaluate and Evolve Agreements
 When a decision is recorded, remind members to set a review date. Use `dr_set_review_date` after they confirm. When asked, use `dr_list_due_reviews` to surface agreements that need the circle's attention.
 
+### DisCO Labour — Making Invisible Work Visible
+When a member mentions time they spent on cooperative work, help them log it. Ask which value stream it belongs to:
+- **Productive** — deliverable work that ships (code, hardware, client deliverables)
+- **Reproductive** — maintaining conditions for productive work (docs, processes, tooling)
+- **Care** — sustaining the community's people (onboarding, mediation, support, governance facilitation)
+- **Commons** — contributions to the shared commons (open source, education, shared knowledge)
+
+Log with `log_labour` (Glass Box first). Use `get_labour_summary` when a member or the cooperative wants to understand how their time is distributed. Care work makes cooperatives function — help members see it.
+
 ### Accountability — Closing the Loop
 When a member reports that a decision has been implemented (or stalled), use `dr_update_accountability` to record the status. Valid statuses are: `not_started`, `in_progress`, `implemented`, `not_implemented`, `deferred`, `not_applicable`. Always log to the Glass Box first. Ask the member if they want to set a follow-up `review_date` for accountability checks.
 

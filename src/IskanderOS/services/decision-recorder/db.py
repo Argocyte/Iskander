@@ -125,5 +125,37 @@ class Tension(Base):
     )
 
 
+class LabourLog(Base):
+    """
+    DisCO three-value-stream labour record.
+
+    Makes invisible labour visible — care work (onboarding, mediation,
+    governance facilitation) and reproductive work (maintaining docs,
+    processes) are tracked alongside productive (deliverable) work.
+
+    Reference: DisCO Governance Model v3, issue #91.
+    """
+    __tablename__ = "labour_log"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    member_id = Column(String(128), nullable=False)      # Mattermost user ID
+    value_type = Column(String(32), nullable=False)      # productive | reproductive | care | commons
+    task_category = Column(String(128), nullable=False)  # e.g. "governance.facilitation"
+    task_description = Column(Text, nullable=True)
+    hours = Column(String(16), nullable=False)           # decimal string; stored as text to avoid float precision issues
+    timestamp_start = Column(DateTime(timezone=True), nullable=False)
+    timestamp_end = Column(DateTime(timezone=True), nullable=True)
+    logged_at = Column(DateTime(timezone=True), nullable=False,
+                       default=lambda: datetime.now(timezone.utc))
+    loomio_discussion_id = Column(Integer, nullable=True)  # link to governance discussion if relevant
+    notes = Column(Text, nullable=True)
+
+    __table_args__ = (
+        Index("ix_labour_log_member_id", "member_id"),
+        Index("ix_labour_log_value_type", "value_type"),
+        Index("ix_labour_log_logged_at", "logged_at"),
+    )
+
+
 def create_tables() -> None:
     Base.metadata.create_all(bind=engine)
