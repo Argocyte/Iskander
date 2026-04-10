@@ -15,7 +15,7 @@ Run it once and your cooperative gets:
 
 - **Loomio** -- democratic decision-making (proposals, votes, discussions, STV elections)
 - **Mattermost** -- real-time team chat, bridged to governance via the AI Clerk
-- **AI Clerk** -- a conversational assistant that helps members participate, draft documents, and understand decisions
+- **AI Agent System** -- five specialised agents: Clerk (governance assistant), Steward (treasury monitor), Sentry (infrastructure health), Wellbeing (name changes and member dignity), Librarian (document search)
 - **Nextcloud** -- shared files, calendar, contacts, email
 - **Glass Box** -- every AI action is transparent and auditable by any member
 - **Treasury monitoring** -- an AI Steward watches the cooperative's wallet and creates proposals for significant spending
@@ -74,7 +74,7 @@ Everything else runs on proven, boring technology.
          |  Votes           |      |  |  +---------------+
          +-------+----------+--+---+  |
                  |              |      |
-         OpenClaw (Clerk + Steward agents)
+       OpenClaw (Clerk, Steward, Sentry, Wellbeing, Librarian)
                  |              |
       +----------+----------+  |
       |                     |  |
@@ -89,7 +89,7 @@ Credentials  Backups       Monitoring   Tunnel          Mesh VPN
 
 All services run on **K3s** -- a single 40MB binary that replaces Docker Compose with production-grade Kubernetes orchestration. Native multi-node support means federation and horizontal scaling require no architectural changes.
 
-### Services (Phase C -- 15 services, ~7.2GB RAM minimum, 16GB recommended)
+### Services (Phase C -- 17 services, ~7.2GB RAM minimum, 16GB recommended)
 
 | Service | Purpose | Footprint |
 |---------|---------|-----------|
@@ -98,10 +98,12 @@ All services run on **K3s** -- a single 40MB binary that replaces Docker Compose
 | Redis | Session store and job queue | ~50MB |
 | Authentik | OAuth2/OIDC identity provider -- SSO for all services | ~500MB |
 | Loomio | Democratic decision-making (proposals, votes, STV elections) | ~512MB |
-| Mattermost | Real-time team chat, AI Clerk bridge | ~300MB |
+| Mattermost | Real-time team chat, AI agent bridge | ~300MB |
 | Nextcloud | File hosting, calendar, contacts, email client | ~512MB |
 | Ollama | Local LLM inference (Phi-3-mini or OLMo) | ~2GB |
-| OpenClaw | AI agent orchestrator (Clerk + Steward agents) | ~256MB |
+| OpenClaw | AI agent orchestrator (5 agents: Clerk, Steward, Sentry, Wellbeing, Librarian) | ~256MB |
+| Decision Recorder | Loomio webhook capture, IPFS pinning, Glass Box audit trail | ~128MB |
+| Provisioner | Member onboarding orchestrator (Authentik → Loomio → Mattermost) | ~128MB |
 | IPFS Kubo | Decision record pinning for tamper-proof history | ~256MB |
 | Vaultwarden | Bitwarden-compatible shared credential management | ~50MB |
 | Backrest | Backup management with Restic backend | ~50MB |
@@ -122,29 +124,41 @@ Adds four more services, bringing the total to 19:
 
 ---
 
-## The AI Clerk
+## AI Agent System
 
-The Clerk is every member's personal assistant. It operates in both Loomio (governance context) and Mattermost (real-time chat), bridging the two seamlessly.
+Five specialised agents run in OpenClaw, each with a distinct mandate and domain boundary. All write actions go through the Glass Box -- any member can see the full audit trail.
 
-**What it does:**
-- Answers questions about the cooperative (finances, decisions, rules)
-- Helps draft proposals -- guides members to the right decision process (Advice, Consent, Consensus)
-- Drafts and revises documents based on member input, saves to Nextcloud
-- Incorporates feedback from multiple members into document revisions
-- Summarises long discussion threads in plain language
-- Tracks action items as Loomio tasks with due dates
-- Reminds members about pending votes via @mentions
-- Guides members through ICA values self-reflection
-- DMs members via Loomio Direct Discussions or Mattermost DMs to help expand ideas into full proposals
-- Bridges governance decisions into Mattermost channels for real-time discussion
+### @clerk — Governance Secretary
+Every member's governance assistant. Operates in Loomio and Mattermost.
+- Drafts and revises proposals (Advice, Consent, Consensus process)
+- Summarises discussions and archives decisions to Nextcloud
+- Tracks action items, reviews, and tensions (S3: Navigate Via Tension)
+- Prepares AGM and circle meeting agenda packs
+- Runs governance health assessments (block rate, review debt, tension backlog)
+- Never votes, never advocates for any position
 
-**What it never does:**
-- Vote or express opinions
-- Advocate for any position
-- Withhold information from any member
-- Finalise a document without member approval
+### @steward — Treasury Monitor
+Watches the cooperative's wallet and governance records.
+- Monitors treasury thresholds and flags significant movements
+- Drafts Loomio proposals when thresholds are crossed
+- Posts treasury summaries to governance channel
 
-Every Clerk action is logged in the Glass Box -- any member can ask "What have you been doing?" and get a full audit trail.
+### @sentry — Infrastructure Health Interpreter
+Translates system health into cooperative language.
+- Reads Beszel metrics and surface issues as actionable member updates
+- Categorises alerts by severity and impact on cooperative operations
+
+### @wellbeing — Member Dignity Agent
+Handles dignity-critical operations. Separate from the Clerk by design.
+- Platform-wide name changes: Authentik → Provisioner → Mattermost/Loomio redaction
+- Old names are never logged, echoed, or surfaced -- Glass Box uses `[REDACTED]`
+- Opt-in group notification; never mentions the old name
+
+### @librarian — Knowledge Steward
+Read-only access to the cooperative's documents and governance pattern library.
+- Searches Nextcloud by file name and content
+- Retrieves and summarises document text
+- Searches the S3 governance pattern commons
 
 ---
 
@@ -169,8 +183,8 @@ Every aspect of Iskander is designed around the seven cooperative principles:
 | 2 | Democratic Member Control | Loomio voting (Consent, Consensus, STV elections), 1-member-1-vote via BrightID + MACI ZK proofs |
 | 3 | Member Economic Participation | Treasury monitoring, member shares, surplus distribution, asset-lock enforcement, cFIAT tokens |
 | 4 | Autonomy and Independence | Fully self-hosted on K3s, no cloud dependencies, cooperative owns all infrastructure |
-| 5 | Education, Training, Information | Clerk-guided onboarding, values reflection, proactive governance training |
-| 6 | Cooperation among Cooperatives | Headscale mesh federation, Liaison agent, cooperative discovery protocol |
+| 5 | Education, Training, Information | Clerk-guided onboarding, values reflection, Librarian agent (Nextcloud document search + governance pattern commons) |
+| 6 | Cooperation among Cooperatives | Headscale mesh federation, cooperative discovery protocol, shared governance pattern library |
 | 7 | Concern for Community | SDG tracking, sustainability reporting, energy-aware scheduling |
 
 ---
@@ -184,50 +198,47 @@ iskander/
 |   +-- ROADMAP.md                  # Phased project roadmap
 |   +-- OVERVIEW.md                 # Non-technical overview for members
 |   +-- PLAN.md                     # Detailed technical plan (Route C -> B)
+|   +-- superpowers/specs/          # Agent and feature design specs
 |   +-- archive/                    # Archived design specs (.odt, .txt)
-+-- skills/                         # Claude Code skill plugins (11 skills)
-+-- loomio-wiki-complete.json       # Full Loomio feature documentation
++-- infra/
+|   +-- helm/iskander/              # Helm chart (all Phase C services)
+|   +-- ansible/                    # Installation playbooks
++-- install/                        # curl|sh installer entry point
++-- verify/                         # End-to-end smoke test scripts
++-- skills/                         # Claude Code skill plugins
 +-- src/
     +-- IskanderOS/
-    |   +-- openclaw/               # AI agent system
-    |   |   +-- openclaw.json       # OpenClaw configuration
+    |   +-- openclaw/               # AI agent orchestrator (OpenClaw)
+    |   |   +-- main.py             # FastAPI server, webhook routing
+    |   |   +-- requirements.txt
+    |   |   +-- governance_patterns.yaml  # S3 pattern library
     |   |   +-- agents/
     |   |   |   +-- orchestrator/   # Agent coordinator
-    |   |   |   +-- clerk/          # Member-facing assistant (Loomio + Mattermost)
-    |   |   |   +-- steward/        # Treasury monitor
+    |   |   |   +-- clerk/          # Governance secretary (@clerk)
+    |   |   |   +-- steward/        # Treasury monitor (@steward)
+    |   |   |   +-- sentry/         # Infrastructure health (@sentry)
+    |   |   |   +-- wellbeing/      # Member dignity agent (@wellbeing)
+    |   |   |   +-- librarian/      # Knowledge steward (@librarian)
     |   |   +-- skills/
     |   |       +-- loomio-bridge/  # Loomio API integration
-    |   |       +-- mattermost-bridge/ # Mattermost API integration
     |   |       +-- document-collab/# AI-assisted document drafting
     |   |       +-- values-reflection/
     |   |       +-- glass-box/      # Audit trail
     |   |       +-- treasury-monitor/
     |   |       +-- membership/     # Join/leave/onboard
     |   +-- services/
-    |   |   +-- authentik/          # SSO identity provider
-    |   |   +-- loomio/             # Governance platform
-    |   |   +-- mattermost/         # Real-time team chat
-    |   |   +-- nextcloud/          # Files, calendar, email
-    |   |   +-- vaultwarden/        # Credential management
-    |   |   +-- backrest/           # Backup management
-    |   |   +-- beszel/             # System monitoring
-    |   |   +-- cloudflared/        # Tunnel for public access
-    |   |   +-- headscale/          # Mesh VPN for federation
-    |   |   +-- decision-recorder/  # Webhook service (FastAPI)
+    |   |   +-- decision-recorder/  # Loomio webhook + IPFS + Glass Box (FastAPI)
+    |   |   +-- provisioner/        # Member onboarding orchestrator (FastAPI)
+    |   |   +-- authentik/          # SSO identity provider config
+    |   |   +-- loomio/             # Governance platform config
+    |   |   +-- nextcloud/          # Files, calendar, email config
     |   |   +-- website/            # Public cooperative website
-    |   +-- infra/
-    |   |   +-- k3s/                # K3s manifests and Helm charts
-    |   |   +-- ansible/            # Installation playbooks
-    |   |   +-- decision_log.sql    # Database schema
-    |   +-- contracts/              # Solidity smart contracts
+    |   +-- contracts/              # Solidity smart contracts (Phase B)
     |   |   +-- src/
     |   |       +-- Constitution.sol
     |   |       +-- CoopIdentity.sol    # ERC-4973 Soulbound Tokens
     |   |       +-- governance/
     |   |           +-- MACIVoting.sol  # ZK secret ballot voting
-    |   +-- scripts/
-    |   |   +-- install.sh          # curl|sh entry point
-    |   |   +-- first-boot.py       # Interactive setup wizard
     |   +-- docs/                   # ICA reference documents
     |   +-- legacy/                 # Archived: previous backend, frontend, agents
     +-- IskanderHearth/             # Open hardware (CERN-OHL-S v2)
@@ -252,7 +263,7 @@ curl -sfL https://get.iskander.coop | sh
 That single command runs an Ansible playbook underneath that:
 
 1. Installs K3s (single 40MB binary -- no Docker required)
-2. Deploys all 15 Phase C services
+2. Deploys all 17 Phase C services
 3. Configures SSO across Loomio, Mattermost, Nextcloud, and Vaultwarden
 4. Launches the first-boot wizard
 
@@ -271,8 +282,8 @@ The experience is modelled on Tailscale: one command, no prerequisites, works ev
 
 Iskander is in active development following the **Route C to B** plan:
 
-- **Phase C (Weeks 1-3)**: Radical MVP -- 15 services: K3s + Loomio + Mattermost + Clerk + Nextcloud + SSO + Glass Box + Treasury + Vaultwarden + Backrest + Beszel + Cloudflared + Headscale + IPFS + Ollama
-- **Phase B (Weeks 4-8)**: Expansion -- blockchain (Anvil + Chain Bridge), ZK voting, governance contracts, email (Stalwart), website (Caddy), bringing total to 19 services
+- **Phase C (Weeks 1-3)**: Radical MVP -- 17 services: K3s + Loomio + Mattermost + Nextcloud + SSO + Glass Box + Decision Recorder + Provisioner + OpenClaw (5 agents) + Vaultwarden + Backrest + Beszel + Cloudflared + Headscale + IPFS + Ollama. Phase C is complete.
+- **Phase B (Weeks 4-8)**: Expansion -- blockchain (Anvil + Chain Bridge), ZK voting, governance contracts, email (Stalwart), website (Caddy), bringing total to 21 services
 
 See [docs/ROADMAP.md](docs/ROADMAP.md) for the full phased roadmap.
 
@@ -318,5 +329,5 @@ The AGPL-3.0 ensures that any deployment must share its source code, preventing 
 - [DarkFi](https://dark.fi) -- Lunarpunk philosophy and anonymous infrastructure
 - [Loomio](https://www.loomio.com) -- Decision-making platform
 - [Mattermost](https://mattermost.com) -- Open-source team chat
-- [OpenClaw](https://openclaw.dev) -- AI agent orchestrator
+- [OpenClaw](src/IskanderOS/openclaw/) -- AI agent orchestrator (project-local)
 - [K3s](https://k3s.io) -- Lightweight Kubernetes
