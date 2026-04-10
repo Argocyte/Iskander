@@ -26,6 +26,7 @@ from pydantic import BaseModel
 
 from .agents.clerk import agent as clerk_agent
 from .agents.librarian import agent as librarian_agent
+from .agents.wellbeing import agent as wellbeing_agent
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
 logger = logging.getLogger("openclaw")
@@ -90,7 +91,7 @@ class MattermostEvent(BaseModel):
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "agents": ["clerk", "librarian"]}
+    return {"status": "ok", "agents": ["clerk", "librarian", "wellbeing"]}
 
 
 # ---------------------------------------------------------------------------
@@ -98,6 +99,8 @@ def health() -> dict:
 # ---------------------------------------------------------------------------
 
 LIBRARIAN_TRIGGER = os.environ.get("LIBRARIAN_TRIGGER_WORD", "@librarian")
+WELLBEING_TRIGGER = os.environ.get("WELLBEING_TRIGGER_WORD", "@wellbeing")
+CLERK_TRIGGER = os.environ.get("CLERK_TRIGGER_WORD", "@clerk")
 
 
 @app.post("/webhook/mattermost")
@@ -106,6 +109,7 @@ async def mattermost_webhook(event: MattermostEvent) -> JSONResponse:
     Receives Mattermost outgoing webhook events.
 
     Routes to the Librarian Agent when the trigger word is @librarian,
+    Routes to the Wellbeing Agent when the trigger word is @wellbeing,
     and to the Clerk for @clerk and all other messages.
     """
     # Authenticate — Mattermost sends the token in the body
@@ -134,6 +138,13 @@ async def mattermost_webhook(event: MattermostEvent) -> JSONResponse:
     if is_librarian:
         agent_name = "librarian"
         agent_run = librarian_agent.run
+    is_wellbeing = trigger == WELLBEING_TRIGGER.lower() or message.lower().startswith(
+        WELLBEING_TRIGGER.lower()
+    )
+
+    if is_wellbeing:
+        agent_name = "wellbeing"
+        agent_run = wellbeing_agent.run
     else:
         agent_name = "clerk"
         agent_run = clerk_agent.run
