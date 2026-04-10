@@ -1,0 +1,129 @@
+name: Phase C Smoke Tests
+
+on:
+  push:
+    branches: [main, "feature/**"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  unit-tests:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install provisioner deps
+        run: pip install -r src/IskanderOS/services/provisioner/requirements-test.txt
+
+      - name: Run provisioner tests
+        working-directory: src/IskanderOS/services/provisioner
+        env:
+          DATABASE_URL: "sqlite:///:memory:"
+          AUTHENTIK_URL: "https://auth.example.coop"
+          AUTHENTIK_API_TOKEN: test-token
+          LOOMIO_URL: "https://loomio.example.coop"
+          LOOMIO_API_KEY: test-key
+          LOOMIO_GROUP_KEY: test-group
+          MATTERMOST_URL: "https://mm.example.coop"
+          MATTERMOST_BOT_TOKEN: test-bot
+          MATTERMOST_ONBOARDING_CHANNEL: chan-onboard
+        run: python -m pytest tests/ -v
+
+      - name: Install openclaw deps
+        run: pip install anthropic httpx pytest
+
+      - name: Run openclaw tests
+        working-directory: src/IskanderOS/openclaw
+        env:
+          LOOMIO_URL: "https://loomio.example.coop"
+          LOOMIO_API_KEY: test-key
+          MATTERMOST_URL: "https://mm.example.coop"
+          MATTERMOST_BOT_TOKEN: test-bot
+          ANTHROPIC_API_KEY: test-anthropic
+        run: python -m pytest tests/ -v
+
+  smoke-tests:
+    name: Smoke tests (K3d cluster)
+    runs-on: ubuntu-latest
+    # Run on pushes to main, PRs targeting main, or manual dispatch.
+    # Gated on unit-tests to avoid spinning up K3d when unit tests already fail.
+    if: github.ref == 'refs/heads/main' || github.base_ref == 'main' || github.event_name == 'workflow_dispatch'
+    needs: unit-tests
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install K3d
+        run: |
+          curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+          k3d version
+
+      - uses: azure/setup-helm@v3
+        with:
+          version: "v3.14.0"
+
+      - name: Create K3d cluster
+        run: |
+          k3d cluster create iskander-ci \
+            --agents 1 \
+            --k3s-arg "--disable=traefik@server:*" \
+            --wait --timeout 120s
+
+      - name: Fetch Helm dependencies
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo update
+          helm dependency build ./infra/helm/iskander
+
+      - name: Deploy Iskander (CI values)
+        run: |
+          helm upgrade --install iskander ./infra/helm/iskander \
+            -f infra/helm/iskander/values.yaml \
+            -f infra/helm/iskander/values-ci.yaml \
+            --set global.postgresql.auth.postgresPassword=${{ secrets.CI_PG_SUPERUSER_PASSWORD }} \
+            --set global.postgresql.auth.password=${{ secrets.CI_PG_PASSWORD }} \
+            --set decisionRecorder.postgresql.password=${{ secrets.CI_DR_PG_PASSWORD }} \
+            --set decisionRecorder.loomio.webhookSecret=ci-webhook-secret \
+            --set openclaw.anthropicApiKey=${{ secrets.CI_ANTHROPIC_API_KEY }} \
+            --set openclaw.mattermost.botToken=ci-bot-token \
+            --set openclaw.loomio.apiKey=ci-loomio-key \
+            --set provisioner.postgresql.password=${{ secrets.CI_PROV_PG_PASSWORD }} \
+            --set provisioner.authentik.apiToken=${{ secrets.CI_AUTHENTIK_TOKEN }} \
+            --wait --timeout 300s
+
+      - name: Wait for core services
+        run: |
+          kubectl -n iskander wait --for=condition=ready pod -l app.kubernetes.io/component=decision-recorder --timeout=120s || true
+          kubectl -n iskander wait --for=condition=ready pod -l app.kubernetes.io/component=provisioner --timeout=120s || true
+
+      - name: Port-forward Glass Box and Provisioner
+        run: |
+          kubectl -n iskander port-forward svc/decision-recorder 3000:3000 &
+          kubectl -n iskander port-forward svc/provisioner 3001:3001 &
+          sleep 5
+
+      - name: Run smoke tests
+        env:
+          GLASS_BOX_URL: "http://localhost:3000"
+          PROVISIONER_URL: "http://localhost:3001"
+          AUTHENTIK_URL: ""    # Skip Authentik-dependent tests in CI (no real Authentik)
+          AUTHENTIK_TOKEN: ""
+          IPFS_URL: ""
+        run: bash verify/verify.sh 2>&1 | tee verify-output.log && exit ${PIPESTATUS[0]}
+
+      - name: Upload verification log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-output
+          path: verify-output.log
+
+      - name: Tear down K3d cluster
+        if: always()
+        run: k3d cluster delete iskander-ci

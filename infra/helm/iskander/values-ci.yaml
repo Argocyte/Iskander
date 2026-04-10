@@ -1,0 +1,85 @@
+# CI values override — K3d single-node cluster
+# Overrides values.yaml for GitHub Actions integration tests.
+# Secrets are injected via environment variables by the CI workflow.
+#
+# Required secrets (set via helm upgrade --set or CI environment):
+#   global.postgresql.auth.postgresPassword
+#   global.postgresql.auth.password
+#   decisionRecorder.postgresql.password
+#   decisionRecorder.loomio.webhookSecret  (can be "ci-secret" in CI)
+#   openclaw.anthropicApiKey               (real key or "ci-skip" to skip AI tests)
+#   openclaw.mattermost.botToken
+#   openclaw.loomio.apiKey
+#   provisioner.postgresql.password
+#   provisioner.authentik.apiToken
+
+global:
+  cooperative:
+    name: "CI Test Cooperative"
+    domain: ""
+
+# Disable resource-heavy services not needed for smoke tests
+nextcloud:
+  enabled: false
+
+vaultwarden:
+  enabled: false
+
+backrest:
+  enabled: false
+
+beszel:
+  enabled: false
+
+# Keep small resource footprint in CI
+loomio:
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+mattermost:
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "50m"
+    limits:
+      memory: "256Mi"
+      cpu: "300m"
+
+openclaw:
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "25m"
+    limits:
+      memory: "128Mi"
+      cpu: "200m"
+
+decisionRecorder:
+  image:
+    repository: ghcr.io/argocyte/decision-recorder
+    tag: "latest"
+  resources:
+    requests:
+      memory: "32Mi"
+      cpu: "10m"
+    limits:
+      memory: "64Mi"
+      cpu: "100m"
+
+provisioner:
+  enabled: true
+  image:
+    repository: ghcr.io/argocyte/provisioner
+    tag: "latest"
+  resources:
+    requests:
+      memory: "32Mi"
+      cpu: "10m"
+    limits:
+      memory: "64Mi"
+      cpu: "100m"
