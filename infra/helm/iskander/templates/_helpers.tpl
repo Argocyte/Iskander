@@ -34,6 +34,9 @@ Create chart label.
 
 {{/*
 Common labels applied to every resource.
+Note: cooperative name goes in annotations (iskander.labels.annotations), not
+labels, because Kubernetes label values forbid spaces and other characters
+that cooperative names legitimately contain.
 */}}
 {{- define "iskander.labels" -}}
 helm.sh/chart: {{ include "iskander.chart" . }}
@@ -43,6 +46,12 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end }}
+
+{{/*
+Common annotations — carries human-readable fields that labels cannot.
+*/}}
+{{- define "iskander.annotations" -}}
 iskander.coop/cooperative: {{ .Values.global.cooperative.name | quote }}
 {{- end }}
 
