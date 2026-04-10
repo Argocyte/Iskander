@@ -1,0 +1,148 @@
+# Governance Pattern Library — Phase 1
+#
+# Curated governance failure modes and proven responses, drawn from:
+#   - ICA Guidance Notes on the Co-operative Principles
+#   - Radical Routes Toolkit
+#   - S3 Practical Guide
+#   - DisCO Governance Model V3.0
+#
+# Each pattern is associated with one or more health signals (see spec).
+# The Clerk surfaces relevant patterns when a signal is detected.
+#
+# Phase 2 will add contributed cooperative experience (opt-in, anonymised).
+# Phase 3 will add cross-cooperative commons search.
+
+patterns:
+  - id: PAT-001
+    title: High consent block rate
+    signals: [SIG-05]
+    lifecycle_stages: [growing, maturing, scaling]
+    description: >
+      When consent proposals are frequently blocked, it often indicates that
+      proposals are not being developed with enough prior consultation, or that
+      the consent threshold is being applied differently by different members.
+    what_helps:
+      - >
+        Use the "Advice Process" for operational decisions before bringing them to
+        consent: ask everyone affected and anyone with expertise before finalising.
+      - >
+        Clarify what counts as a "paramount objection" in your governance agreements
+        — S3 defines objections as reasons a proposal would cause harm to the cooperative
+        or the commons, not simply personal preference.
+      - >
+        Consider a "rounds" approach: each member gets uninterrupted time to surface
+        concerns before the consent question is asked, reducing reactive blocking.
+    what_doesnt_help:
+      - Pressure on objectors to withdraw their concerns
+      - Majority voting to override blocks — this defeats the purpose of consent
+    references:
+      - "S3 Practical Guide: Consent Decision Making"
+      - "ICA Guidance Notes Part 1, Principle 2 (Democratic Control)"
+
+  - id: PAT-002
+    title: Governance debt accumulation
+    signals: [SIG-06]
+    lifecycle_stages: [any]
+    description: >
+      Agreements that are never reviewed become zombie policies — still technically
+      in effect but no longer reflecting the cooperative's actual practice. This
+      creates a gap between formal governance and lived reality that erodes trust.
+    what_helps:
+      - >
+        Set review dates at the time agreements are made, not retrospectively.
+        A simple rule: "all agreements get a review date, default 6 months."
+      - >
+        Designate a circle or role responsible for governance housekeeping —
+        not to make decisions, but to ensure the review process happens.
+      - >
+        Distinguish between "still relevant and working," "relevant but needs
+        updating," and "no longer needed" — the last category can be archived.
+    what_doesnt_help:
+      - Mass review sessions that try to process many agreements at once
+      - Waiting until there is a governance crisis to review anything
+    references:
+      - "S3 Practical Guide: Evaluate and Evolve Agreements"
+      - "Radical Routes Toolkit: Policies and Procedures"
+
+  - id: PAT-003
+    title: Tension backlog stagnation
+    signals: [SIG-07]
+    lifecycle_stages: [any]
+    description: >
+      Logged tensions that are not processed signal one of three things: the tension
+      tracking system is not integrated into governance meetings; there is insufficient
+      capacity to process tensions; or tensions are being logged but not owned.
+    what_helps:
+      - >
+        Reserve time at every circle meeting to review the tension backlog — even
+        10 minutes to acknowledge and route tensions prevents pile-up.
+      - >
+        Assign each tension to an owner (a role or person responsible for ensuring
+        it gets processed, not necessarily for resolving it themselves).
+      - >
+        Distinguish tensions that need a governance response from tensions that need
+        an operational response — not everything requires a proposal.
+    what_doesnt_help:
+      - Closing tensions without resolution just to clear the backlog
+      - Merging distinct tensions into one "catch-all" discussion
+    references:
+      - "S3 Practical Guide: Navigate Via Tension"
+      - "DisCO Governance Model V3.0: Section on Organisational Health"
+
+  - id: PAT-004
+    title: Structural scale threshold not addressed
+    signals: [SIG-09]
+    lifecycle_stages: [growing]
+    description: >
+      Governance structures that work at 5 members often break at 15. Founding-era
+      habits — everyone in every meeting, consensus by silence, informal decisions —
+      do not scale. The result is either governance gridlock or informal hierarchies
+      forming outside the formal structure.
+    what_helps:
+      - >
+        At 15 members: consider one operational circle (Finance or Operations) with
+        delegated spending authority up to a defined threshold. This reduces agenda
+        burden on full-membership meetings by 30-40%.
+      - >
+        At 30 members: distinguish between "the cooperative" (all members) and
+        "circles" (smaller groups with delegated domains). Not every decision needs
+        to go to all members.
+      - >
+        At 50 members: consider a representative council structure, with circle
+        delegates attending a coordination meeting rather than all members.
+    what_doesnt_help:
+      - Restructuring everything at once in a "big bang" governance redesign
+      - Adding bureaucracy before the cooperative has identified what it actually needs
+    references:
+      - "S3 Practical Guide: Circle Structure"
+      - "Radical Routes Toolkit: Governance at Scale"
+      - "Mondragon Federation structure documentation"
+
+  - id: PAT-005
+    title: Unanimous voting pattern
+    signals: [SIG-11]
+    lifecycle_stages: [any]
+    description: >
+      Near-unanimous agreement on every decision often indicates that substantive
+      deliberation is happening elsewhere — in informal conversations, WhatsApp groups,
+      or offline — and formal votes are a rubber stamp. This can be a sign of a healthy
+      advice process, but can also indicate social pressure, fear of conflict, or
+      disengagement from members who do not bother to object.
+    what_helps:
+      - >
+        Make it explicitly safe to object — distinguish between "I can live with this"
+        (consent) and "I actively support this" (enthusiasm). Consent is sufficient;
+        you don't need everyone to love the proposal.
+      - >
+        Ask directly: "Is there anything anyone is uncomfortable saying in the group?"
+        Some tensions are better surfaced in one-to-one conversations first.
+      - >
+        Check whether proposals are being sufficiently deliberated before the vote.
+        Unanimous agreement after a 2-hour discussion is different from unanimous
+        agreement after a 2-minute overview.
+    what_doesnt_help:
+      - Forcing artificial dissent or "devil's advocate" roles
+      - Treating consensus as a problem — sometimes agreement really is unanimous
+    references:
+      - "S3 Practical Guide: Consent Decision Making"
+      - "ICA Guidance Notes Part 1, Principle 2 (Democratic Control)"

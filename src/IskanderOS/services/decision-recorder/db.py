@@ -18,6 +18,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     Index,
+    Integer,
     String,
     Text,
     create_engine,
@@ -94,7 +95,7 @@ class Tension(Base):
     __tablename__ = "tensions"
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
-    logged_by = Column(String(128), nullable=False, index=True)   # Mattermost user ID
+    logged_by = Column(String(128), nullable=False)                # Mattermost user ID
     description = Column(Text, nullable=False)                     # What the member noticed
     domain = Column(String(128), nullable=True)                    # Circle/group this relates to
     driver_statement = Column(Text, nullable=True)                 # Formatted S3 driver (if drafted)
@@ -105,8 +106,32 @@ class Tension(Base):
     resolved_at = Column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
-        Index("ix_tensions_logged_by", "logged_by"),
+        Index("ix_tensions_logged_by", "logged_by"),  # explicit name avoids index=True duplication
         Index("ix_tensions_status", "status"),
+    )
+
+
+class GovernanceHealthReport(Base):
+    """
+    A periodic governance health assessment produced by the Clerk.
+
+    Stores the lifecycle stage, detected signals, triggered nudges, and any
+    nudges the cooperative has chosen to suppress. This record is visible to
+    all members via the Glass Box — no hidden assessments.
+    """
+    __tablename__ = "governance_health_reports"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    assessed_at = Column(DateTime(timezone=True), nullable=False,
+                         default=lambda: datetime.now(timezone.utc))
+    lifecycle_stage = Column(String(32), nullable=True)  # founding|growing|maturing|scaling|federated
+    # JSON arrays stored as text for SQLite compatibility in tests
+    signals_json = Column(Text, nullable=False, default="[]")    # [{id, name, severity, detected, detail}]
+    nudges_json = Column(Text, nullable=False, default="[]")     # [{id, signal_id, message, actions}]
+    suppressed_json = Column(Text, nullable=False, default="[]") # [nudge_id, ...]
+
+    __table_args__ = (
+        Index("ix_governance_health_reports_assessed_at", "assessed_at"),
     )
 
 

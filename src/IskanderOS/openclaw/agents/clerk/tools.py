@@ -13,8 +13,11 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from pathlib import Path
 from typing import Any
+
+import yaml
 
 import httpx
 
@@ -547,6 +550,355 @@ def prepare_meeting_agenda(group_key: str | None = None) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Governance Health Signals — Phase 1 (5 signals computed from DR + Loomio)
+# ---------------------------------------------------------------------------
+
+# Pattern library is co-located with this file
+_PATTERN_LIBRARY_PATH = Path(__file__).parent.parent.parent / "governance_patterns.yaml"
+
+_LIFECYCLE_THRESHOLDS = {
+    "founding": 15,   # members
+    "growing": 30,
+    "maturing": 50,
+}
+
+_NUDGE_TEMPLATES: dict[str, str] = {
+    "SIG-05": (
+        "Consent proposals have been blocked in {count} of your last 10 proposals. "
+        "This is a common signal that proposals need more prior consultation before "
+        "the consent question is asked — or that what counts as a valid objection "
+        "needs clarifying.\n\n"
+        "The pattern library has guidance on this: ask me to 'search patterns for SIG-05'."
+    ),
+    "SIG-06": (
+        "{count} agreement(s) are overdue for review by more than 30 days. "
+        "Zombie policies — agreements no one follows because no one remembered to update them "
+        "— erode trust in formal governance.\n\n"
+        "I can list the overdue reviews and help you schedule a governance session."
+    ),
+    "SIG-07": (
+        "{count} tension(s) have been open for more than 14 days without being processed. "
+        "Tensions that are logged but not acted on signal that governance meetings are not "
+        "connecting to the tension backlog.\n\n"
+        "Reserve 10 minutes at your next meeting to triage these. I can prepare a summary."
+    ),
+    "SIG-09": (
+        "Your cooperative has {count} members — a size where many cooperatives find that "
+        "delegating some decisions to smaller circles makes governance more manageable.\n\n"
+        "A common starting point: one Finance or Operations circle with spending authority "
+        "up to a defined threshold, leaving everything else with the full membership. "
+        "I can help draft a circle charter if you'd like to explore it."
+    ),
+    "SIG-11": (
+        "More than 90% of your recent decisions have passed with no abstentions or objections. "
+        "This may simply mean your proposals are well-prepared — but it can also signal "
+        "that substantive deliberation is happening informally, outside the formal process.\n\n"
+        "Consider checking whether members feel safe to object. The pattern library has guidance."
+    ),
+}
+
+
+def _get_loomio_member_count(group_key: str | None) -> int | None:
+    """Fetch member count from Loomio groups API. Returns None on error."""
+    try:
+        path = "groups"
+        params: dict = {}
+        if group_key:
+            params["key"] = group_key
+        data = _loomio_get(path, params)
+        groups = data if isinstance(data, list) else data.get("groups", [])
+        if not groups:
+            return None
+        # Sum member counts across matching groups
+        return sum(g.get("memberships_count", 0) for g in groups[:1])  # first group only
+    except Exception:
+        logger.warning("Could not fetch Loomio member count", exc_info=True)
+        return None
+
+
+def assess_governance_health(group_key: str | None = None) -> dict:
+    """
+    Run a Phase 1 governance health assessment and store the report.
+
+    Checks 5 signals computable from existing data:
+      SIG-05: Block rate spike (decision-recorder)
+      SIG-06: Governance debt (decision-recorder)
+      SIG-07: Tension backlog (decision-recorder)
+      SIG-09: Structural scale threshold (Loomio)
+      SIG-11: Unanimous voting pattern (decision-recorder)
+
+    Stores the report via POST /governance/health-reports and returns it.
+    Glass Box MUST be called before this function (write action).
+    """
+    signals: list[dict] = []
+    nudges: list[dict] = []
+
+    # --- Fetch raw data ---
+    try:
+        with _http_client() as client:
+            # Last 10 decisions for block rate and unanimity checks
+            decisions_resp = client.get(
+                f"{DECISION_RECORDER_BASE}/decisions",
+                params={"limit": 10, **({"group_key": group_key} if group_key else {})},
+            )
+            decisions_resp.raise_for_status()
+            recent_decisions = decisions_resp.json().get("decisions", [])
+
+            # Overdue reviews
+            reviews_resp = client.get(
+                f"{DECISION_RECORDER_BASE}/decisions/reviews/due",
+                params={"days_ahead": 0},  # only already-overdue
+            )
+            reviews_resp.raise_for_status()
+            overdue_reviews = reviews_resp.json().get("reviews", [])
+
+            # Stale tensions
+            tensions_resp = client.get(
+                f"{DECISION_RECORDER_BASE}/tensions",
+                params={"status": "open", "limit": 50},
+            )
+            tensions_resp.raise_for_status()
+            open_tensions = tensions_resp.json().get("tensions", [])
+    except Exception as exc:
+        raise RuntimeError(f"Could not fetch data for health assessment: {exc}") from exc
+
+    today = date.today()
+
+    # --- SIG-05: Block rate spike ---
+    blocked = [d for d in recent_decisions if d.get("status") == "blocked"]
+    if len(blocked) >= 3:
+        sig = {
+            "id": "SIG-05",
+            "name": "Block rate spike",
+            "severity": "warning",
+            "detected": True,
+            "detail": f"{len(blocked)} of last {len(recent_decisions)} proposals were blocked",
+        }
+        signals.append(sig)
+        nudges.append({
+            "id": "NUDGE-SIG-05",
+            "signal_id": "SIG-05",
+            "message": _NUDGE_TEMPLATES["SIG-05"].format(count=len(blocked)),
+            "actions": ["search_pattern_library('SIG-05')", "dr_list_tensions()"],
+        })
+    else:
+        signals.append({
+            "id": "SIG-05", "name": "Block rate spike",
+            "severity": "warning", "detected": False, "detail": f"{len(blocked)} blocked in last {len(recent_decisions)}",
+        })
+
+    # --- SIG-06: Governance debt ---
+    # Overdue reviews: review_date < today AND review_status != "complete"
+    debt_count = 0
+    for r in overdue_reviews:
+        due = r.get("review_due_at") or r.get("review_date")
+        if due:
+            try:
+                due_date = date.fromisoformat(str(due)[:10])
+                days_overdue = (today - due_date).days
+                if days_overdue > 30:
+                    debt_count += 1
+            except (ValueError, TypeError):
+                pass
+    if debt_count >= 5:
+        signals.append({
+            "id": "SIG-06", "name": "Governance debt",
+            "severity": "advisory", "detected": True,
+            "detail": f"{debt_count} agreements overdue for review by >30 days",
+        })
+        nudges.append({
+            "id": "NUDGE-SIG-06",
+            "signal_id": "SIG-06",
+            "message": _NUDGE_TEMPLATES["SIG-06"].format(count=debt_count),
+            "actions": ["dr_list_due_reviews(days_ahead=0)"],
+        })
+    else:
+        signals.append({
+            "id": "SIG-06", "name": "Governance debt",
+            "severity": "advisory", "detected": False,
+            "detail": f"{debt_count} agreements overdue by >30 days (threshold: 5)",
+        })
+
+    # --- SIG-07: Tension backlog ---
+    stale_tensions = 0
+    for t in open_tensions:
+        logged_at = t.get("logged_at")
+        if logged_at:
+            try:
+                logged = datetime.fromisoformat(str(logged_at).replace("Z", "+00:00"))
+                age_days = (datetime.now(timezone.utc) - logged).days
+                if age_days > 14:
+                    stale_tensions += 1
+            except (ValueError, TypeError):
+                pass
+    if stale_tensions >= 8:
+        signals.append({
+            "id": "SIG-07", "name": "Tension backlog",
+            "severity": "advisory", "detected": True,
+            "detail": f"{stale_tensions} tensions open for >14 days",
+        })
+        nudges.append({
+            "id": "NUDGE-SIG-07",
+            "signal_id": "SIG-07",
+            "message": _NUDGE_TEMPLATES["SIG-07"].format(count=stale_tensions),
+            "actions": ["dr_list_tensions(status='open')"],
+        })
+    else:
+        signals.append({
+            "id": "SIG-07", "name": "Tension backlog",
+            "severity": "advisory", "detected": False,
+            "detail": f"{stale_tensions} tensions open for >14 days (threshold: 8)",
+        })
+
+    # --- SIG-09: Structural scale threshold ---
+    member_count = _get_loomio_member_count(group_key)
+    if member_count is not None:
+        threshold_crossed = None
+        for threshold in (50, 30, 15):
+            if member_count >= threshold:
+                threshold_crossed = threshold
+                break
+        if threshold_crossed:
+            signals.append({
+                "id": "SIG-09", "name": "Structural scale threshold",
+                "severity": "advisory", "detected": True,
+                "detail": f"{member_count} members — crossed {threshold_crossed}-member threshold",
+            })
+            nudges.append({
+                "id": "NUDGE-SIG-09",
+                "signal_id": "SIG-09",
+                "message": _NUDGE_TEMPLATES["SIG-09"].format(count=member_count),
+                "actions": ["search_pattern_library('SIG-09')"],
+            })
+        else:
+            signals.append({
+                "id": "SIG-09", "name": "Structural scale threshold",
+                "severity": "advisory", "detected": False,
+                "detail": f"{member_count} members (thresholds: 15/30/50)",
+            })
+
+    # --- SIG-11: Unanimous voting pattern ---
+    decisions_with_stances = [
+        d for d in recent_decisions
+        if d.get("stance_counts") and isinstance(d["stance_counts"], dict)
+    ]
+    if decisions_with_stances:
+        unanimous = sum(
+            1 for d in decisions_with_stances
+            if sum(v for k, v in d["stance_counts"].items() if k not in ("agree", "abstain")) == 0
+        )
+        unanimity_rate = unanimous / len(decisions_with_stances)
+        if unanimity_rate > 0.9:
+            signals.append({
+                "id": "SIG-11", "name": "Unanimous voting pattern",
+                "severity": "advisory", "detected": True,
+                "detail": f"{unanimous}/{len(decisions_with_stances)} recent decisions had no objections",
+            })
+            nudges.append({
+                "id": "NUDGE-SIG-11",
+                "signal_id": "SIG-11",
+                "message": _NUDGE_TEMPLATES["SIG-11"],
+                "actions": ["search_pattern_library('SIG-11')"],
+            })
+        else:
+            signals.append({
+                "id": "SIG-11", "name": "Unanimous voting pattern",
+                "severity": "advisory", "detected": False,
+                "detail": f"{unanimity_rate:.0%} unanimous (threshold: >90%)",
+            })
+
+    # --- Lifecycle stage inference ---
+    lifecycle_stage: str | None = None
+    if member_count is not None:
+        if member_count >= 50:
+            lifecycle_stage = "scaling"
+        elif member_count >= 15:
+            lifecycle_stage = "growing"
+        else:
+            lifecycle_stage = "founding"
+
+    # --- Store report ---
+    report_payload = {
+        "lifecycle_stage": lifecycle_stage,
+        "signals": signals,
+        "nudges": nudges,
+    }
+    with _http_client() as client:
+        resp = client.post(
+            f"{DECISION_RECORDER_BASE}/governance/health-reports",
+            json=report_payload,
+        )
+        resp.raise_for_status()
+        stored = resp.json()
+
+    detected = [s for s in signals if s.get("detected")]
+    return {
+        "report_id": stored["id"],
+        "assessed_at": stored["assessed_at"],
+        "lifecycle_stage": lifecycle_stage,
+        "signals_detected": len(detected),
+        "signals": signals,
+        "nudges": nudges,
+        "summary": (
+            f"Assessment complete. {len(detected)} signal(s) detected out of {len(signals)} checked."
+            + (" Nudges have been generated — ask me to explain any of them." if nudges else "")
+        ),
+    }
+
+
+def get_governance_health_report() -> dict:
+    """Fetch the most recent governance health report from the decision-recorder."""
+    with _http_client() as client:
+        resp = client.get(f"{DECISION_RECORDER_BASE}/governance/health-reports/latest")
+        if resp.status_code == 404:
+            return {"error": "No health report found. Run 'assess_governance_health' first."}
+        resp.raise_for_status()
+        return resp.json()
+
+
+def search_pattern_library(query: str, signal_id: str | None = None) -> list[dict]:
+    """
+    Search the local governance pattern library.
+
+    The pattern library contains curated cooperative governance failure modes
+    and proven responses, drawn from ICA guidance, Radical Routes, and S3.
+
+    Returns matching patterns as a list of dicts with id, title, description,
+    what_helps, what_doesnt_help, and references.
+    """
+    try:
+        with open(_PATTERN_LIBRARY_PATH) as f:
+            data = yaml.safe_load(f)
+        patterns = data.get("patterns", [])
+    except (FileNotFoundError, yaml.YAMLError) as exc:
+        logger.warning("Could not load pattern library: %s", exc)
+        return []
+
+    query_lower = query.lower()
+    results = []
+    for pat in patterns:
+        # Filter by signal_id if provided
+        if signal_id and signal_id not in (pat.get("signals") or []):
+            continue
+        # Text match: check title and description
+        if (
+            query_lower in pat.get("title", "").lower()
+            or query_lower in pat.get("description", "").lower()
+            or query_lower in " ".join(pat.get("signals", [])).lower()
+        ):
+            results.append({
+                "id": pat["id"],
+                "title": pat["title"],
+                "signals": pat.get("signals", []),
+                "description": pat.get("description", "").strip(),
+                "what_helps": pat.get("what_helps", []),
+                "what_doesnt_help": pat.get("what_doesnt_help", []),
+                "references": pat.get("references", []),
+            })
+    return results
+
+
+# ---------------------------------------------------------------------------
 # Tool definitions for the Anthropic API tool_use format
 # ---------------------------------------------------------------------------
 
@@ -774,7 +1126,6 @@ TOOL_DEFINITIONS = [
             "required": ["channel_id", "message"],
         },
     },
-<<<<<<< feature/meeting-prep-clerk
     # Meeting prep tools — read-only
     {
         "name": "list_recent_decisions",
@@ -808,7 +1159,14 @@ TOOL_DEFINITIONS = [
             "Generate a draft meeting agenda from the Glass Box: "
             "agreements due for review, open tensions, and recent decisions. "
             "Returns a formatted Markdown document ready to share."
-=======
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "group_key": {"type": "string", "description": "Optional: filter decisions by Loomio group key"},
+            },
+        },
+    },
     {
         "name": "provision_member",
         "description": (
@@ -816,21 +1174,71 @@ TOOL_DEFINITIONS = [
             "REQUIRES glass_box_log to be called first. "
             "REQUIRES explicit member confirmation before calling. "
             "Returns a password reset URL to share with the new member."
->>>>>>> main
         ),
         "input_schema": {
             "type": "object",
             "properties": {
-<<<<<<< feature/meeting-prep-clerk
-                "group_key": {"type": "string", "description": "Optional: filter decisions by Loomio group key"},
-            },
-=======
                 "username": {"type": "string", "description": "Lowercase username (letters, numbers, hyphens, underscores only)"},
                 "email": {"type": "string", "description": "New member's email address"},
                 "display_name": {"type": "string", "description": "Display name (optional, defaults to username)"},
             },
             "required": ["username", "email"],
->>>>>>> main
+        },
+    },
+    # Governance health signals — Phase 1 (5 signals)
+    {
+        "name": "assess_governance_health",
+        "description": (
+            "Run a governance health assessment and store the report. "
+            "Checks 5 observable signals: block rate spike, governance debt, "
+            "tension backlog, structural scale threshold, and unanimous voting pattern. "
+            "REQUIRES glass_box_log to be called first (this is a write action — it stores a report). "
+            "Returns detected signals and nudges. Use monthly or when a member asks about "
+            "governance health."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "group_key": {
+                    "type": "string",
+                    "description": "Loomio group key to scope the assessment (optional — omit for all groups)",
+                },
+            },
+        },
+    },
+    {
+        "name": "get_governance_health_report",
+        "description": (
+            "Retrieve the most recent governance health report. "
+            "Read-only — no Glass Box required. "
+            "Use when a member asks 'how is our governance doing?' or 'what did the last health check find?'"
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+    {
+        "name": "search_pattern_library",
+        "description": (
+            "Search the governance pattern library for known failure modes and proven responses. "
+            "Read-only — no Glass Box required. "
+            "Use when a member wants to understand a signal, or asks for governance advice. "
+            "The library draws from ICA guidance, Radical Routes, and S3 Practical Guide."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search term — can be a signal ID (e.g. 'SIG-05'), a keyword, or a description of the governance challenge",
+                },
+                "signal_id": {
+                    "type": "string",
+                    "description": "Optional: filter to patterns for a specific signal (e.g. 'SIG-06')",
+                },
+            },
+            "required": ["query"],
         },
     },
 ]
@@ -859,4 +1267,8 @@ TOOL_REGISTRY: dict[str, Any] = {
     "list_due_reviews": list_due_reviews,
     "list_tensions": list_tensions,
     "prepare_meeting_agenda": prepare_meeting_agenda,
+    # Governance health signals
+    "assess_governance_health": assess_governance_health,
+    "get_governance_health_report": get_governance_health_report,
+    "search_pattern_library": search_pattern_library,
 }
