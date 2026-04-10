@@ -30,8 +30,8 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, sta
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
-from . import ipfs
-from .db import Decision, GlassBoxEntry, SessionLocal, Tension, create_tables, get_db
+import ipfs
+from db import Decision, GlassBoxEntry, SessionLocal, Tension, create_tables, get_db
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
 logger = logging.getLogger("decision-recorder")
@@ -351,9 +351,11 @@ class ReviewUpdateRequest(BaseModel):
     @classmethod
     def parse_date(cls, v: str) -> str:
         try:
-            date.fromisoformat(v)
+            parsed = date.fromisoformat(v)
         except ValueError:
             raise ValueError("review_date must be YYYY-MM-DD")
+        if parsed <= date.today():
+            raise ValueError("review_date must be a future date")
         return v
 
 
@@ -451,6 +453,12 @@ def log_tension(
 ) -> dict:
     """Log an organisational tension for structured processing."""
     _verify_internal_caller(request)
+    actor_user_id = request.headers.get("X-Actor-User-Id", "")
+    if actor_user_id and body.logged_by != actor_user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="logged_by must match the authenticated actor (X-Actor-User-Id)",
+        )
     tension = Tension(
         logged_by=body.logged_by,
         description=body.description,
@@ -486,6 +494,9 @@ def list_tensions(
     q = db.query(Tension).order_by(Tension.logged_at.desc())
     if status_filter:
         q = q.filter(Tension.status == status_filter)
+    actor_user_id = request.headers.get("X-Actor-User-Id", "")
+    if actor_user_id:
+        q = q.filter(Tension.logged_by == actor_user_id)
     total = q.count()
     tensions = q.offset(offset).limit(limit).all()
     return {"total": total, "tensions": [_tension_summary(t) for t in tensions]}
@@ -505,6 +516,12 @@ def update_tension(
     Phase B will add a facilitator-override path when circle roles are implemented.
     """
     _verify_internal_caller(request)
+    actor_user_id = request.headers.get("X-Actor-User-Id", "")
+    if actor_user_id and body.updated_by != actor_user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="updated_by must match the authenticated actor (X-Actor-User-Id)",
+        )
     t = db.query(Tension).filter(Tension.id == tension_id).first()
     if not t:
         raise HTTPException(status_code=404, detail="Tension not found")

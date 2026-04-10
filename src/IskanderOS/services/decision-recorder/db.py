@@ -5,6 +5,12 @@ Tables:
   decisions   — Loomio decision outcomes with IPFS CIDs
   glass_box   — Clerk agent action audit trail
   tensions    — Organisational tensions (S3: Navigate Via Tension pattern)
+
+Primary key columns use Integer (maps to SERIAL in Postgres, INTEGER ROWID
+alias in SQLite) so that autoincrement works correctly in both environments.
+Foreign-key-style columns that reference external systems (loomio_poll_id,
+loomio_discussion_id) are kept as BigInteger since they hold externally-
+generated IDs that may exceed 32-bit range.
 """
 from __future__ import annotations
 
@@ -13,11 +19,11 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     BigInteger,
-    Boolean,
     Column,
     Date,
     DateTime,
     Index,
+    Integer,
     String,
     Text,
     create_engine,
@@ -46,7 +52,7 @@ class Decision(Base):
     """A recorded Loomio decision outcome."""
     __tablename__ = "decisions"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     loomio_poll_id = Column(BigInteger, nullable=False, index=True)
     loomio_group_key = Column(String(64), nullable=True, index=True)
     title = Column(Text, nullable=False)
@@ -74,7 +80,7 @@ class GlassBoxEntry(Base):
     """An audit trail entry for a Clerk agent action."""
     __tablename__ = "glass_box"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     actor = Column(String(128), nullable=False, index=True)   # Mattermost user ID
     agent = Column(String(64), nullable=False)                 # e.g. "clerk"
     action = Column(String(256), nullable=False)
@@ -93,8 +99,8 @@ class Tension(Base):
     """
     __tablename__ = "tensions"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
-    logged_by = Column(String(128), nullable=False, index=True)   # Mattermost user ID
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    logged_by = Column(String(128), nullable=False)   # Mattermost user ID; indexed via __table_args__
     description = Column(Text, nullable=False)                     # What the member noticed
     domain = Column(String(128), nullable=True)                    # Circle/group this relates to
     driver_statement = Column(Text, nullable=True)                 # Formatted S3 driver (if drafted)
