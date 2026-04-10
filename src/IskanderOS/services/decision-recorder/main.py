@@ -7,9 +7,11 @@ Endpoints:
   GET  /log                     Glass Box: query audit trail (member-readable)
   GET  /decisions               List recorded decisions
   GET  /decisions/{id}          Single decision with IPFS CID
-  PATCH /decisions/{id}/review  Set review date on an agreement (S3: Evolve Agreements)
-  GET  /decisions/reviews/due   Agreements due for review
-  POST /tensions                Log an organisational tension (S3: Navigate Via Tension)
+  PATCH /decisions/{id}/review         Set review date on an agreement (S3: Evolve Agreements)
+  GET  /decisions/reviews/due          Agreements due for review
+  PATCH /decisions/{id}/accountability Update implementation status (Decidim accountability)
+  GET  /decisions/accountability/overdue Decisions needing accountability follow-up
+  POST /tensions                       Log an organisational tension (S3: Navigate Via Tension)
   GET  /tensions                List tensions
   PATCH /tensions/{id}          Update tension status / driver statement
   GET  /health                  Service health
@@ -421,6 +423,143 @@ def list_due_reviews(
 
 
 # ---------------------------------------------------------------------------
+# Accountability tracking (Decidim-inspired: was the decision implemented?)
+# ---------------------------------------------------------------------------
+
+_ACCOUNTABILITY_STATUSES = frozenset({
+    "not_applicable",
+    "not_started",
+    "in_progress",
+    "implemented",
+    "not_implemented",
+    "deferred",
+})
+
+
+class AccountabilityUpdateRequest(BaseModel):
+    status: str = Field(
+        ...,
+        description=(
+            "not_applicable | not_started | in_progress | "
+            "implemented | not_implemented | deferred"
+        ),
+    )
+    notes: str | None = Field(None, description="Free-text implementation notes", max_length=4_000)
+    review_date: str | None = Field(None, description="ISO 8601 YYYY-MM-DD for next accountability check")
+    updated_by: str = Field(..., description="Mattermost user ID of the member updating", max_length=128)
+
+    @field_validator("status")
+    @classmethod
+    def valid_status(cls, v: str) -> str:
+        if v not in _ACCOUNTABILITY_STATUSES:
+            raise ValueError(f"status must be one of: {', '.join(sorted(_ACCOUNTABILITY_STATUSES))}")
+        return v
+
+    @field_validator("review_date")
+    @classmethod
+    def future_review_date(cls, v: str | None) -> str | None:
+        if not v:
+            return v
+        try:
+            parsed = date.fromisoformat(v)
+        except ValueError:
+            raise ValueError("review_date must be YYYY-MM-DD")
+        if parsed <= date.today():
+            raise ValueError("review_date must be a future date")
+        return v
+
+
+@app.patch("/decisions/{decision_id}/accountability")
+def update_accountability(
+    decision_id: int,
+    body: AccountabilityUpdateRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    Update the accountability status on a recorded decision.
+
+    Tracks whether the decision was actually implemented — closing the loop
+    between governance outcome and real-world action (Decidim pattern, issue #94).
+    Glass Box logs all changes so any member can audit the accountability trail.
+    """
+    _verify_internal_caller(request)
+    actor_user_id = request.headers.get("X-Actor-User-Id", "")
+    if actor_user_id and body.updated_by != actor_user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="updated_by must match the authenticated actor (X-Actor-User-Id)",
+        )
+
+    d = db.query(Decision).filter(Decision.id == decision_id).first()
+    if not d:
+        raise HTTPException(status_code=404, detail="Decision not found")
+
+    old_status = d.accountability_status
+    d.accountability_status = body.status
+    d.accountability_updated_at = datetime.now(timezone.utc)
+    if body.notes is not None:
+        d.accountability_notes = body.notes
+    if body.review_date is not None:
+        d.accountability_review_date = date.fromisoformat(body.review_date)
+
+    db.commit()
+    logger.info(
+        "Accountability updated by %s: decision=%s %s→%s",
+        body.updated_by, decision_id, old_status, body.status,
+    )
+    return _decision_accountability_summary(d)
+
+
+@app.get("/decisions/accountability/overdue")
+def list_overdue_accountability(
+    request: Request,
+    days_ahead: int = Query(7, ge=1, le=90),
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    List decisions whose accountability_review_date falls within the next N days
+    and are still in an open status (not implemented or not_applicable).
+
+    Used by the Clerk agent for weekly accountability reminders.
+    """
+    client_host = request.client.host if request.client else "unknown"
+    _rate_check(f"decisions:{client_host}", _QUERY_MAX)
+
+    from datetime import timedelta
+    future = date.today() + timedelta(days=days_ahead)
+
+    open_statuses = ("not_started", "in_progress", "deferred")
+    due = (
+        db.query(Decision)
+        .filter(
+            Decision.accountability_review_date.isnot(None),
+            Decision.accountability_review_date <= future,
+            Decision.accountability_status.in_(open_statuses),
+        )
+        .order_by(Decision.accountability_review_date)
+        .all()
+    )
+    return {
+        "count": len(due),
+        "days_ahead": days_ahead,
+        "decisions": [_decision_accountability_summary(d) for d in due],
+    }
+
+
+def _decision_accountability_summary(d: Decision) -> dict:
+    return {
+        "id": d.id,
+        "title": d.title,
+        "accountability_status": d.accountability_status,
+        "accountability_notes": d.accountability_notes,
+        "accountability_review_date": str(d.accountability_review_date) if d.accountability_review_date else None,
+        "accountability_updated_at": d.accountability_updated_at.isoformat() if d.accountability_updated_at else None,
+        "loomio_url": d.loomio_url,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Tension tracking (S3: Navigate Via Tension)
 # ---------------------------------------------------------------------------
 
@@ -587,6 +726,8 @@ def _decision_summary(d: Decision) -> dict:
         "loomio_url": d.loomio_url,
         "decided_at": d.decided_at.isoformat() if d.decided_at else None,
         "recorded_at": d.recorded_at.isoformat(),
+        "accountability_status": d.accountability_status,
+        "accountability_review_date": str(d.accountability_review_date) if d.accountability_review_date else None,
     }
 
 

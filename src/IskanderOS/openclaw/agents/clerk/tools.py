@@ -461,6 +461,55 @@ def dr_set_review_date(
         return resp.json()
 
 
+def dr_update_accountability(
+    *,
+    decision_id: int,
+    status: str,
+    updated_by: str,
+    notes: str | None = None,
+    review_date: str | None = None,
+) -> dict:
+    """
+    Update the accountability/implementation status on a recorded decision (#94).
+    Glass Box MUST be called before this function.
+
+    status must be one of:
+      not_applicable | not_started | in_progress |
+      implemented | not_implemented | deferred
+
+    review_date (optional) must be ISO 8601 YYYY-MM-DD in the future.
+    """
+    from datetime import date as _date
+    _VALID_STATUSES = {
+        "not_applicable", "not_started", "in_progress",
+        "implemented", "not_implemented", "deferred",
+    }
+    if status not in _VALID_STATUSES:
+        raise ValueError(f"status must be one of: {', '.join(sorted(_VALID_STATUSES))}")
+    if review_date:
+        try:
+            rd = _date.fromisoformat(review_date)
+        except ValueError:
+            raise ValueError(f"review_date must be YYYY-MM-DD, got: {review_date!r}")
+        if rd <= _date.today():
+            raise ValueError(
+                f"review_date must be in the future (got {review_date}). "
+                "A past date would hide the decision from accountability checks."
+            )
+    payload: dict = {"status": status, "updated_by": updated_by}
+    if notes is not None:
+        payload["notes"] = notes
+    if review_date is not None:
+        payload["review_date"] = review_date
+    with _http_client() as client:
+        resp = client.patch(
+            f"{DECISION_RECORDER_BASE}/decisions/{decision_id}/accountability",
+            json=payload,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
 # ---------------------------------------------------------------------------
 # Meeting prep tools — read-only, no Glass Box required
 # ---------------------------------------------------------------------------
@@ -786,6 +835,30 @@ TOOL_DEFINITIONS = [
             "required": ["channel_id", "message"],
         },
     },
+    {
+        "name": "dr_update_accountability",
+        "description": (
+            "Update the accountability/implementation status on a recorded decision. "
+            "Use when a member reports progress on implementing a cooperative decision. "
+            "REQUIRES glass_box_log to be called first. "
+            "Status options: not_applicable | not_started | in_progress | "
+            "implemented | not_implemented | deferred"
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "decision_id": {"type": "integer", "description": "Decision ID from the recorded decisions"},
+                "status": {
+                    "type": "string",
+                    "description": "Implementation status: not_applicable | not_started | in_progress | implemented | not_implemented | deferred",
+                },
+                "updated_by": {"type": "string", "description": "Mattermost user ID of the member reporting"},
+                "notes": {"type": "string", "description": "Optional implementation notes (what has been done, what is planned)"},
+                "review_date": {"type": "string", "description": "Optional future YYYY-MM-DD for next accountability check"},
+            },
+            "required": ["decision_id", "status", "updated_by"],
+        },
+    },
     # Meeting prep tools — read-only
     {
         "name": "list_recent_decisions",
@@ -866,6 +939,7 @@ TOOL_REGISTRY: dict[str, Any] = {
     "dr_log_tension": dr_log_tension,
     "dr_update_tension": dr_update_tension,
     "dr_set_review_date": dr_set_review_date,
+    "dr_update_accountability": dr_update_accountability,
     # Meeting prep tools
     "list_recent_decisions": list_recent_decisions,
     "list_due_reviews": list_due_reviews,

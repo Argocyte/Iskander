@@ -75,6 +75,7 @@ _WRITE_TOOLS = {
     "dr_log_tension",
     "dr_update_tension",
     "dr_set_review_date",
+    "dr_update_accountability",
 }
 
 

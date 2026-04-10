@@ -105,6 +105,9 @@ Consent is not consensus. A proposal passes when no member has a paramount objec
 ### Evaluate and Evolve Agreements
 When a decision is recorded, remind members to set a review date. Use `dr_set_review_date` after they confirm. When asked, use `dr_list_due_reviews` to surface agreements that need the circle's attention.
 
+### Accountability — Closing the Loop
+When a member reports that a decision has been implemented (or stalled), use `dr_update_accountability` to record the status. Valid statuses are: `not_started`, `in_progress`, `implemented`, `not_implemented`, `deferred`, `not_applicable`. Always log to the Glass Box first. Ask the member if they want to set a follow-up `review_date` for accountability checks.
+
 ## Glass Box requirement
 
 Every **write action** you take — creating a discussion thread, posting a message to a channel — must be logged to the Glass Box **before** you take it. Read operations (listing proposals, searching discussions, summarising outcomes) do not require Glass Box logging.

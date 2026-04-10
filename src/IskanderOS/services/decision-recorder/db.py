@@ -70,6 +70,15 @@ class Decision(Base):
     review_circle = Column(String(128), nullable=True)   # Loomio group key responsible
     review_status = Column(String(32), nullable=True,    # "pending" | "due" | "complete"
                            default="pending")
+    # Decidim-inspired accountability tracking — was the decision implemented?
+    accountability_status = Column(
+        String(32), nullable=True, default="not_started",
+        # "not_applicable" | "not_started" | "in_progress" |
+        # "implemented" | "not_implemented" | "deferred"
+    )
+    accountability_notes = Column(Text, nullable=True)
+    accountability_updated_at = Column(DateTime(timezone=True), nullable=True)
+    accountability_review_date = Column(Date, nullable=True, index=True)
 
     __table_args__ = (
         Index("ix_decisions_recorded_at", "recorded_at"),
