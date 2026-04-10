@@ -25,6 +25,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from .agents.clerk import agent as clerk_agent
+from .agents.wellbeing import agent as wellbeing_agent
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
 logger = logging.getLogger("openclaw")
@@ -89,18 +90,24 @@ class MattermostEvent(BaseModel):
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "agent": "clerk"}
+    return {"status": "ok", "agents": ["clerk", "wellbeing"]}
 
 
 # ---------------------------------------------------------------------------
 # Mattermost outgoing webhook receiver
 # ---------------------------------------------------------------------------
 
+WELLBEING_TRIGGER = os.environ.get("WELLBEING_TRIGGER_WORD", "@wellbeing")
+CLERK_TRIGGER = os.environ.get("CLERK_TRIGGER_WORD", "@clerk")
+
+
 @app.post("/webhook/mattermost")
 async def mattermost_webhook(event: MattermostEvent) -> JSONResponse:
     """
-    Receives Mattermost outgoing webhook events when a member mentions @clerk.
-    Authenticates via token, strips the trigger word, dispatches to the Clerk agent.
+    Receives Mattermost outgoing webhook events.
+
+    Routes to the Wellbeing Agent when the trigger word is @wellbeing,
+    and to the Clerk for @clerk and all other messages.
     """
     # Authenticate — Mattermost sends the token in the body
     if not hmac.compare_digest(event.token, MATTERMOST_TOKEN):
@@ -121,18 +128,33 @@ async def mattermost_webhook(event: MattermostEvent) -> JSONResponse:
     if not message:
         return JSONResponse(content={"text": "Yes? How can I help?"})
 
-    logger.info("Clerk request | user=%s | channel=%s | message=%.80s",
-                event.user_name, event.channel_name, message)
+    # Route to the appropriate agent based on trigger word
+    trigger = (event.trigger_word or "").strip().lower()
+    is_wellbeing = trigger == WELLBEING_TRIGGER.lower() or message.lower().startswith(
+        WELLBEING_TRIGGER.lower()
+    )
+
+    if is_wellbeing:
+        agent_name = "wellbeing"
+        agent_run = wellbeing_agent.run
+    else:
+        agent_name = "clerk"
+        agent_run = clerk_agent.run
+
+    logger.info(
+        "%s request | user=%s | channel=%s | message=%.80s",
+        agent_name, event.user_name, event.channel_name, message,
+    )
 
     try:
-        response_text = clerk_agent.run(
+        response_text = agent_run(
             user_id=event.user_id,
             username=event.user_name,
             message=message,
             channel_id=event.channel_id,
         )
     except Exception:
-        logger.exception("Clerk agent error")
+        logger.exception("%s agent error", agent_name)
         response_text = (
             "Something went wrong on my end. Please try again, "
             "or contact a fellow member if the problem persists."

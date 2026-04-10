@@ -264,3 +264,90 @@ def get_member(
         raise HTTPException(status_code=404, detail="Member not found")
 
     return _record_to_dict(record)
+
+
+# ---------------------------------------------------------------------------
+# Name change support — Wellbeing Agent endpoints
+# ---------------------------------------------------------------------------
+
+class UpdateMemberRequest(BaseModel):
+    display_name: str = Field(..., max_length=256)
+
+
+class RedactNameRequest(BaseModel):
+    old_name: str = Field(..., min_length=1, max_length=256)
+    new_name: str = Field(..., min_length=1, max_length=256)
+
+
+@app.patch("/members/{username}")
+def update_member(
+    username: str,
+    body: UpdateMemberRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    Update a member's display name in the Provisioner database.
+
+    Called by the Wellbeing Agent after successfully updating Authentik.
+    Does not touch Authentik — that is done by the agent directly.
+    """
+    _verify_internal_caller(request)
+    client_host = request.client.host if request.client else "unknown"
+    _rate_check(f"member-update:{client_host}", _QUERY_MAX)
+
+    record = (
+        db.query(ProvisioningRecord)
+        .filter(ProvisioningRecord.username == username)
+        .first()
+    )
+    if not record:
+        raise HTTPException(status_code=404, detail="Member not found")
+
+    record.display_name = body.display_name
+    db.commit()
+    db.refresh(record)
+
+    return {
+        "username": record.username,
+        "display_name": record.display_name,
+        "updated": True,
+    }
+
+
+@app.post("/members/{username}/redact")
+def redact_member_name(
+    username: str,
+    body: RedactNameRequest,
+    request: Request,
+) -> dict:
+    """
+    Case-insensitive whole-word replacement of old_name with new_name
+    across Mattermost message bodies and Loomio discussions/comments.
+
+    Called by the Wellbeing Agent after the name change is effective.
+    """
+    _verify_internal_caller(request)
+    client_host = request.client.host if request.client else "unknown"
+    _rate_check(f"redact:{client_host}", 10)  # low limit — rarely needed
+
+    from provisioner.mattermost import search_and_redact_posts
+    from provisioner.loomio import search_and_redact_content
+
+    mm_count = 0
+    loomio_count = 0
+
+    try:
+        mm_count = search_and_redact_posts(body.old_name, body.new_name)
+    except Exception as exc:
+        logger.error("Mattermost redaction failed for %s: %s", username, exc)
+
+    try:
+        loomio_count = search_and_redact_content(body.old_name, body.new_name)
+    except Exception as exc:
+        logger.error("Loomio redaction failed for %s: %s", username, exc)
+
+    return {
+        "mattermost_posts_updated": mm_count,
+        "loomio_items_updated": loomio_count,
+    }
