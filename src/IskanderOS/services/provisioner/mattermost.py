@@ -1,12 +1,14 @@
 """
 Mattermost bot API client for the provisioner service.
 
-Provides one operation:
-  - post_welcome : post a welcome message to the member onboarding channel
+Provides:
+  - post_welcome             : post a welcome message to the member onboarding channel
+  - search_and_redact_posts  : case-insensitive whole-word name replacement in message bodies
 """
 from __future__ import annotations
 
 import os
+import re
 
 import httpx
 
@@ -49,3 +51,54 @@ def post_welcome(username: str, channel_id: str, display_name: str) -> dict:
         data = resp.json()
 
     return {"mattermost_post_id": data["id"]}
+
+
+def search_and_redact_posts(old_name: str, new_name: str) -> int:
+    """
+    Find all Mattermost posts containing old_name and replace with new_name.
+
+    Uses whole-word, case-insensitive matching so partial substrings are not
+    corrupted. Paginates until all matching posts are processed.
+
+    Requires the bot account to have the ``edit_others_posts`` permission.
+    Returns the count of posts updated.
+    """
+    headers = {
+        "Authorization": f"Bearer {MATTERMOST_BOT_TOKEN}",
+        "Content-Type": "application/json",
+    }
+    # Compile pattern once — whole-word, case-insensitive
+    pattern = re.compile(r"\b" + re.escape(old_name) + r"\b", re.IGNORECASE)
+    updated = 0
+    page = 0
+    per_page = 60
+
+    with httpx.Client(timeout=max(_TIMEOUT, 60)) as client:
+        while True:
+            search_resp = client.post(
+                f"{MATTERMOST_URL}/api/v4/posts/search",
+                json={"terms": old_name, "is_or_search": False, "page": page, "per_page": per_page},
+                headers=headers,
+            )
+            search_resp.raise_for_status()
+            data = search_resp.json()
+            posts = data.get("posts") or {}
+
+            for post_id, post in posts.items():
+                original = post.get("message", "")
+                replaced = pattern.sub(new_name, original)
+                if replaced == original:
+                    continue  # no match after whole-word filter
+                patch_resp = client.put(
+                    f"{MATTERMOST_URL}/api/v4/posts/{post_id}/patch",
+                    json={"message": replaced},
+                    headers=headers,
+                )
+                patch_resp.raise_for_status()
+                updated += 1
+
+            if len(posts) < per_page:
+                break
+            page += 1
+
+    return updated
