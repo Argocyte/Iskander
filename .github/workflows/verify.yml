@@ -105,6 +105,8 @@ jobs:
             --set openclaw.loomio.apiKey=ci-loomio-key \
             --set provisioner.postgresql.password=${{ secrets.CI_PROV_PG_PASSWORD }} \
             --set provisioner.authentik.apiToken=${{ secrets.CI_AUTHENTIK_TOKEN }} \
+            --set stewardData.postgresql.password=${{ secrets.CI_STEWARD_DATA_PG_PASSWORD }} \
+            --set stewardData.internalServiceToken=ci-steward-token \
             --wait --timeout 300s
 
       - name: Wait for core services
