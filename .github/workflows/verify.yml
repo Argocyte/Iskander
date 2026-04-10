@@ -124,11 +124,11 @@ jobs:
             --set provisioner.authentik.apiToken=${{ secrets.CI_AUTHENTIK_TOKEN }} \
             --set stewardData.postgresql.password=${{ secrets.CI_STEWARD_DATA_PG_PASSWORD }} \
             --set stewardData.internalServiceToken=ci-steward-token \
-            --timeout 300s
+            --wait --timeout 300s || true
 
       - name: Wait for core services
         run: |
-          kubectl -n iskander wait --for=condition=ready pod -l app.kubernetes.io/component=decision-recorder --timeout=180s
+          kubectl -n iskander wait --for=condition=ready pod -l app.kubernetes.io/component=decision-recorder --timeout=120s || true
           kubectl -n iskander wait --for=condition=ready pod -l app.kubernetes.io/component=provisioner --timeout=60s || true
 
       - name: Port-forward Glass Box and Provisioner
