@@ -31,38 +31,18 @@ backrest:
 beszel:
   enabled: false
 
-# Keep small resource footprint in CI
-loomio:
-  resources:
-    requests:
-      memory: "256Mi"
-      cpu: "100m"
-    limits:
-      memory: "512Mi"
-      cpu: "500m"
-
-mattermost:
-  resources:
-    requests:
-      memory: "128Mi"
-      cpu: "50m"
-    limits:
-      memory: "256Mi"
-      cpu: "300m"
-
+# openclaw is not smoke-tested directly; disable to avoid ImagePullBackOff
 openclaw:
-  resources:
-    requests:
-      memory: "64Mi"
-      cpu: "25m"
-    limits:
-      memory: "128Mi"
-      cpu: "200m"
+  enabled: false
 
+# Custom service images are built and imported into K3d by the CI workflow.
+# imagePullPolicy: IfNotPresent tells Kubernetes to use the locally imported image
+# rather than attempting a registry pull (which would fail for unreleased images).
 decisionRecorder:
   image:
     repository: ghcr.io/argocyte/decision-recorder
-    tag: "latest"
+    tag: "ci"
+    pullPolicy: IfNotPresent
   resources:
     requests:
       memory: "32Mi"
@@ -75,7 +55,22 @@ provisioner:
   enabled: true
   image:
     repository: ghcr.io/argocyte/provisioner
-    tag: "latest"
+    tag: "ci"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      memory: "32Mi"
+      cpu: "10m"
+    limits:
+      memory: "64Mi"
+      cpu: "100m"
+
+stewardData:
+  enabled: true
+  image:
+    repository: ghcr.io/argocyte/steward-data
+    tag: "ci"
+    pullPolicy: IfNotPresent
   resources:
     requests:
       memory: "32Mi"

@@ -62,6 +62,9 @@ spec:
       containers:
         - name: steward-data
           image: {{ .Values.stewardData.image.repository }}:{{ .Values.stewardData.image.tag }}
+          {{- if .Values.stewardData.image.pullPolicy }}
+          imagePullPolicy: {{ .Values.stewardData.image.pullPolicy }}
+          {{- end }}
           envFrom:
             - configMapRef:
                 name: steward-data-config

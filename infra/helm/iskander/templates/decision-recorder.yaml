@@ -66,6 +66,9 @@ spec:
       containers:
         - name: decision-recorder
           image: {{ .Values.decisionRecorder.image.repository }}:{{ .Values.decisionRecorder.image.tag }}
+          {{- if .Values.decisionRecorder.image.pullPolicy }}
+          imagePullPolicy: {{ .Values.decisionRecorder.image.pullPolicy }}
+          {{- end }}
           envFrom:
             - configMapRef:
                 name: decision-recorder-config

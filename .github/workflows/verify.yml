@@ -78,12 +78,29 @@ jobs:
         with:
           version: "v3.14.0"
 
+      - name: Build service images for CI
+        run: |
+          docker build -t ghcr.io/argocyte/decision-recorder:ci \
+            src/IskanderOS/services/decision-recorder/
+          docker build -t ghcr.io/argocyte/provisioner:ci \
+            src/IskanderOS/services/provisioner/
+          docker build -t ghcr.io/argocyte/steward-data:ci \
+            src/IskanderOS/services/steward-data/
+
       - name: Create K3d cluster
         run: |
           k3d cluster create iskander-ci \
             --agents 1 \
             --k3s-arg "--disable=traefik@server:*" \
             --wait --timeout 120s
+
+      - name: Import service images into K3d
+        run: |
+          k3d image import \
+            ghcr.io/argocyte/decision-recorder:ci \
+            ghcr.io/argocyte/provisioner:ci \
+            ghcr.io/argocyte/steward-data:ci \
+            -c iskander-ci
 
       - name: Fetch Helm dependencies
         run: |
@@ -107,12 +124,12 @@ jobs:
             --set provisioner.authentik.apiToken=${{ secrets.CI_AUTHENTIK_TOKEN }} \
             --set stewardData.postgresql.password=${{ secrets.CI_STEWARD_DATA_PG_PASSWORD }} \
             --set stewardData.internalServiceToken=ci-steward-token \
-            --wait --timeout 300s
+            --timeout 300s
 
       - name: Wait for core services
         run: |
-          kubectl -n iskander wait --for=condition=ready pod -l app.kubernetes.io/component=decision-recorder --timeout=120s || true
-          kubectl -n iskander wait --for=condition=ready pod -l app.kubernetes.io/component=provisioner --timeout=120s || true
+          kubectl -n iskander wait --for=condition=ready pod -l app.kubernetes.io/component=decision-recorder --timeout=180s
+          kubectl -n iskander wait --for=condition=ready pod -l app.kubernetes.io/component=provisioner --timeout=60s || true
 
       - name: Port-forward Glass Box and Provisioner
         run: |
