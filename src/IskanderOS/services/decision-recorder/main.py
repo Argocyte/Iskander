@@ -2,17 +2,20 @@
 Decision Recorder — tamper-evident decision storage and Glass Box audit trail.
 
 Endpoints:
-  POST /webhook/loomio          Loomio outcome webhook → PostgreSQL + IPFS
-  POST /log                     Glass Box: Clerk action log entry
-  GET  /log                     Glass Box: query audit trail (member-readable)
-  GET  /decisions               List recorded decisions
-  GET  /decisions/{id}          Single decision with IPFS CID
-  PATCH /decisions/{id}/review  Set review date on an agreement (S3: Evolve Agreements)
-  GET  /decisions/reviews/due   Agreements due for review
-  POST /tensions                Log an organisational tension (S3: Navigate Via Tension)
-  GET  /tensions                List tensions
-  PATCH /tensions/{id}          Update tension status / driver statement
-  GET  /health                  Service health
+  POST /webhook/loomio                       Loomio outcome webhook → PostgreSQL + IPFS
+  POST /log                                  Glass Box: Clerk action log entry
+  GET  /log                                  Glass Box: query audit trail (member-readable)
+  GET  /decisions                            List recorded decisions
+  GET  /decisions/{id}                       Single decision with IPFS CID
+  PATCH /decisions/{id}/review               Set review date on an agreement (S3: Evolve Agreements)
+  GET  /decisions/reviews/due                Agreements due for review
+  POST /tensions                             Log an organisational tension (S3: Navigate Via Tension)
+  GET  /tensions                             List tensions
+  PATCH /tensions/{id}                       Update tension status / driver statement
+  POST /governance/health-reports            Store a governance health report (from Clerk)
+  GET  /governance/health-reports/latest     Most recent governance health report
+  PATCH /governance/health-reports/{id}/suppress-nudge  Suppress a nudge
+  GET  /health                               Service health
 """
 from __future__ import annotations
 
@@ -30,8 +33,8 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, sta
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
-from . import ipfs
-from .db import Decision, GlassBoxEntry, SessionLocal, Tension, create_tables, get_db
+import ipfs
+from db import Decision, GlassBoxEntry, GovernanceHealthReport, SessionLocal, Tension, create_tables, get_db
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
 logger = logging.getLogger("decision-recorder")
@@ -565,3 +568,128 @@ def _parse_dt(value: str | None) -> datetime | None:
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
     except (ValueError, AttributeError):
         return None
+
+
+# ---------------------------------------------------------------------------
+# Governance Health Reports — store and retrieve health assessments from Clerk
+# ---------------------------------------------------------------------------
+
+_VALID_LIFECYCLE_STAGES = {"founding", "growing", "maturing", "scaling", "federated"}
+_VALID_SEVERITIES = {"advisory", "warning", "urgent"}
+
+
+class HealthReportRequest(BaseModel):
+    lifecycle_stage: str | None = None
+    signals: list[dict] = Field(default_factory=list)
+    nudges: list[dict] = Field(default_factory=list)
+
+    @field_validator("lifecycle_stage")
+    @classmethod
+    def valid_stage(cls, v: str | None) -> str | None:
+        if v is not None and v not in _VALID_LIFECYCLE_STAGES:
+            raise ValueError(f"lifecycle_stage must be one of {sorted(_VALID_LIFECYCLE_STAGES)}")
+        return v
+
+    @field_validator("signals")
+    @classmethod
+    def validate_signals(cls, v: list[dict]) -> list[dict]:
+        for sig in v:
+            if "id" not in sig or "severity" not in sig:
+                raise ValueError("Each signal must have 'id' and 'severity'")
+            if sig["severity"] not in _VALID_SEVERITIES:
+                raise ValueError(f"Signal severity must be one of {sorted(_VALID_SEVERITIES)}")
+        return v
+
+
+class SuppressNudgeRequest(BaseModel):
+    nudge_id: str = Field(..., min_length=1, max_length=64)
+
+
+@app.post("/governance/health-reports", status_code=status.HTTP_201_CREATED)
+def store_health_report(
+    body: HealthReportRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    Store a governance health report produced by the Clerk.
+
+    Called by the Clerk after running a health assessment. The report is then
+    retrievable by any member via GET /governance/health-reports/latest.
+    All reports are visible to members — no hidden assessments (Glass Box principle).
+    """
+    _rate_check(request.client.host if request.client else "internal", _QUERY_MAX)
+    _verify_internal_caller(request)
+
+    report = GovernanceHealthReport(
+        lifecycle_stage=body.lifecycle_stage,
+        signals_json=json.dumps(body.signals),
+        nudges_json=json.dumps(body.nudges),
+        suppressed_json="[]",
+    )
+    db.add(report)
+    db.commit()
+    db.refresh(report)
+    return _health_report_summary(report)
+
+
+@app.get("/governance/health-reports/latest")
+def get_latest_health_report(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    Return the most recent governance health report.
+
+    Returns 404 if no assessment has been run yet.
+    """
+    _rate_check(request.client.host if request.client else "internal", _QUERY_MAX)
+    report = (
+        db.query(GovernanceHealthReport)
+        .order_by(GovernanceHealthReport.assessed_at.desc())
+        .first()
+    )
+    if report is None:
+        raise HTTPException(status_code=404, detail="No health report found. Run an assessment first.")
+    return _health_report_summary(report)
+
+
+@app.patch("/governance/health-reports/{report_id}/suppress-nudge")
+def suppress_nudge(
+    report_id: int,
+    body: SuppressNudgeRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    Mark a nudge as suppressed by the cooperative.
+
+    Members can suppress nudges that are not relevant to their situation.
+    The suppression is recorded in the report — all suppression decisions
+    are visible to members (Glass Box principle).
+    """
+    _rate_check(request.client.host if request.client else "internal", _QUERY_MAX)
+    _verify_internal_caller(request)
+
+    report = db.get(GovernanceHealthReport, report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    suppressed = json.loads(report.suppressed_json)
+    if body.nudge_id not in suppressed:
+        suppressed.append(body.nudge_id)
+        report.suppressed_json = json.dumps(suppressed)
+        db.commit()
+
+    return _health_report_summary(report)
+
+
+def _health_report_summary(r: GovernanceHealthReport) -> dict:
+    return {
+        "id": r.id,
+        "assessed_at": r.assessed_at.isoformat(),
+        "lifecycle_stage": r.lifecycle_stage,
+        "signals": json.loads(r.signals_json),
+        "nudges": json.loads(r.nudges_json),
+        "suppressed_nudges": json.loads(r.suppressed_json),
+    }

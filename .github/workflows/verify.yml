@@ -18,6 +18,17 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install decision-recorder deps
+        run: pip install -r src/IskanderOS/services/decision-recorder/requirements-test.txt
+
+      - name: Run decision-recorder tests
+        working-directory: src/IskanderOS/services/decision-recorder
+        env:
+          DATABASE_URL: "sqlite:///:memory:"
+          LOOMIO_WEBHOOK_SECRET: "test-webhook-secret"
+          INTERNAL_SERVICE_TOKEN: ""
+        run: python -m pytest tests/ -v
+
       - name: Install provisioner deps
         run: pip install -r src/IskanderOS/services/provisioner/requirements.txt
 
@@ -36,7 +47,7 @@ jobs:
         run: python -m pytest tests/ -v
 
       - name: Install openclaw deps
-        run: pip install anthropic httpx
+        run: pip install anthropic httpx pyyaml pytest
 
       - name: Run openclaw tests
         working-directory: src/IskanderOS/openclaw
