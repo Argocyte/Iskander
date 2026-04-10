@@ -71,6 +71,9 @@ spec:
       containers:
         - name: provisioner
           image: {{ .Values.provisioner.image.repository }}:{{ .Values.provisioner.image.tag }}
+          {{- if .Values.provisioner.image.pullPolicy }}
+          imagePullPolicy: {{ .Values.provisioner.image.pullPolicy }}
+          {{- end }}
           envFrom:
             - configMapRef:
                 name: provisioner-config
