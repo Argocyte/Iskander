@@ -61,9 +61,9 @@ jobs:
   smoke-tests:
     name: Smoke tests (K3d cluster)
     runs-on: ubuntu-latest
-    # Only run on pushes to main or manual dispatch — not on every feature branch PR
-    # to preserve CI minutes. Use 'needs: unit-tests' to gate on unit test success.
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    # Run on pushes to main, PRs targeting main, or manual dispatch.
+    # Gated on unit-tests to avoid spinning up K3d when unit tests already fail.
+    if: github.ref == 'refs/heads/main' || github.base_ref == 'main' || github.event_name == 'workflow_dispatch'
     needs: unit-tests
 
     steps:
@@ -85,6 +85,12 @@ jobs:
             --k3s-arg "--disable=traefik@server:*" \
             --wait --timeout 120s
 
+      - name: Fetch Helm dependencies
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo update
+          helm dependency build ./infra/helm/iskander
+
       - name: Deploy Iskander (CI values)
         run: |
           helm upgrade --install iskander ./infra/helm/iskander \
@@ -99,9 +105,7 @@ jobs:
             --set openclaw.loomio.apiKey=ci-loomio-key \
             --set provisioner.postgresql.password=${{ secrets.CI_PROV_PG_PASSWORD }} \
             --set provisioner.authentik.apiToken=${{ secrets.CI_AUTHENTIK_TOKEN }} \
-            --set stewardData.postgresql.password=${{ secrets.CI_STEWARD_DATA_PG_PASSWORD }} \
-            --set stewardData.internalServiceToken=ci-steward-token \
-            --wait --timeout 300s || true
+            --wait --timeout 300s
 
       - name: Wait for core services
         run: |
