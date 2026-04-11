@@ -48,3 +48,76 @@ loomio-wiki-complete.json
 # Iskander installer — generated secrets file (NEVER commit)
 install/generated-values.yaml
 /opt/iskander/generated-values.yaml
+
+# === WALLET / KEY / SEED PROTECTION ===
+# Added 2026-04-11 ahead of Iskander wallet installation (per the cooperative's
+# financial-sovereignty driver). These patterns NEVER reach version control.
+# If you find a file matching any of these patterns in the worktree, halt and
+# ask Lola before any commit. Invariant #2 (agents draft, humans sign): Et never
+# holds signing keys; only the propose-key pattern from tx_orchestrator.py.
+# Red-team standing paramount objection enforces this absolutely.
+
+# Generic wallet directories
+wallets/
+wallet/
+*-wallet/
+.wallet/
+keys/
+keystore/
+keystores/
+.keystore
+.keystores
+
+# Common wallet file patterns
+*.key
+*.keystore
+*.keystore.json
+*.seed
+*.mnemonic
+*.wallet
+*.wallet.json
+mnemonic.txt
+mnemonic.md
+seed.txt
+seed.md
+recovery.txt
+recovery-phrase.*
+private-key.*
+private_key.*
+
+# Specific wallet tooling outputs
+geth-keystore/
+parity-keystore/
+besu-keystore/
+hardhat-keystore/
+foundry-keystore/
+ledger-export.*
+trezor-export.*
+
+# Gnosis Safe / multisig drafts that might leak human signers
+.gnosis-safe-cache/
+safe-tx-drafts/
+
+# Iskander-specific (treasury operational data)
+iskander-treasury/
+iskander-wallets/
+treasury-cache/
+treasury-state/
+
+# Hardware wallet integration files (defensive)
+*.hwi
+*.hwi.json
+
+# Environment variable files for chain RPC + wallet config
+.env.wallet
+.env.treasury
+.env.chain
+secrets/wallet/
+secrets/keys/
+
+# Generated address books (these CAN be public, but may contain pre-publication
+# state — Steward agent decides when to promote them to the public reporting layer)
+address-book.json
+.address-cache/
+
+# === END WALLET / KEY / SEED PROTECTION ===
