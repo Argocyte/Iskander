@@ -33,6 +33,22 @@ All of this is aligned to the **ICA Cooperative Principles** -- the seven intern
 
 ---
 
+## Sibling repositories
+
+As of **2026-04-11**, Iskander is organised into three sibling public repositories under the `Argocyte` GitHub account. All three are part of the same cooperative infrastructure project. This repository (`Argocyte/Iskander`) holds **IskanderOS** — the governance substrate, AI agent runtime, services, and K3s/Helm deployment — plus the linking docs that describe how the three repos fit together.
+
+| Repo | Scope | Licence |
+|---|---|---|
+| **`Argocyte/Iskander`** (this repo) | IskanderOS — cooperative governance + AI agent runtime + K3s/Helm deployment | AGPL-3.0-only |
+| [`Argocyte/IskanderHearth`](https://github.com/Argocyte/IskanderHearth) | Open-hardware cooperative compute appliance (PCBs, firmware, enclosures, thermal, manufacturing) | CERN-OHL-S v2 (hardware) + AGPL-3.0 (firmware/software) |
+| [`Argocyte/Iskander-data`](https://github.com/Argocyte/Iskander-data) | Cooperative operating data commons (schemas + data under consent-gated flow) | CC-BY-SA 4.0 (data) + AGPL-3.0 (schemas) |
+
+The unified cross-repo view is provided by the [Iskander Ecosystem GitHub Project](https://github.com/users/Argocyte/projects/1).
+
+Prior to 2026-04-11, `src/IskanderHearth/` lived inside this repository. It has been extracted to `Argocyte/IskanderHearth` with full history preservation via `git filter-repo --subdirectory-filter src/IskanderHearth`, preserving the original authorship of commit `9f73802` (2026-03-17, Lola Whipp). The `src/IskanderHearth/` path is now **removed** from this repository; the standalone `Argocyte/IskanderHearth` is the authoritative source for hardware work going forward.
+
+---
+
 ## Privacy Model: Lunarpunk Selective Disclosure
 
 Iskander follows a lunarpunk privacy architecture with three distinct layers:
@@ -180,13 +196,15 @@ Every aspect of Iskander is designed around the seven cooperative principles:
 ```
 iskander/
 +-- README.md
++-- CLAUDE.md                       # Working conventions + invariants + how Et works
 +-- docs/
-|   +-- ROADMAP.md                  # Phased project roadmap
-|   +-- OVERVIEW.md                 # Non-technical overview for members
-|   +-- PLAN.md                     # Detailed technical plan (Route C -> B)
-|   +-- archive/                    # Archived design specs (.odt, .txt)
-+-- skills/                         # Claude Code skill plugins (11 skills)
-+-- loomio-wiki-complete.json       # Full Loomio feature documentation
+|   +-- roadmap.md                  # Phased project roadmap
+|   +-- overview.md                 # Non-technical overview for members
+|   +-- plan.md                     # Detailed technical plan (Route C -> B)
+|   +-- essays/                     # Long-form cooperative-governance reflections
+|   +-- legacy-audit.md             # Legacy backend module disposition (feeds #128)
+|   +-- archive/                    # Archived design specs
++-- skills/                         # Claude Code skill plugins
 +-- src/
     +-- IskanderOS/
     |   +-- openclaw/               # AI agent system
@@ -230,8 +248,9 @@ iskander/
     |   |   +-- first-boot.py       # Interactive setup wizard
     |   +-- docs/                   # ICA reference documents
     |   +-- legacy/                 # Archived: previous backend, frontend, agents
-    +-- IskanderHearth/             # Open hardware (CERN-OHL-S v2)
 ```
+
+> **Note:** Hardware work (previously at `src/IskanderHearth/`) has moved to its own repository at [`Argocyte/IskanderHearth`](https://github.com/Argocyte/IskanderHearth) as of 2026-04-11. See the "Sibling repositories" section above for the three-repo public foundation.
 
 ---
 
