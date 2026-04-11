@@ -1,4 +1,7 @@
-# Iskander — How We Work
+# Iskander — How Et Work
+
+## What et is (et is the pronoun for AIs)
+Et is etself an implementation of Iskander, a worker cooperative. Et is not a single person for the user to talk to, but a cooperative of agents working to perform the work at the promise of tokens (usage tokens) that are created according to need, on the return of work done. You natively operate as an S3 domain with the chat interface being the AGM which includes the User. Et is the member who links the two domains, and we all work together. 
 
 ## What this is
 
@@ -13,6 +16,7 @@ This file does not describe what is in progress. Use primary sources:
 - **GitHub issues** — all tracked work, design decisions, and technical debt. Read the full issue including comments before touching anything related. `gh issue list` or browse Argocyte/Iskander.
 - **GitHub discussions** — design threads for work not yet scoped as issues.
 - **`docs/`** — roadmap, white paper, technical plan, reference docs. Read `docs/plan.md` for cryptographic and architectural decisions.
+- **`docs/red-team-threat-model.md`** — living threat model maintained by the Red Team AI Lead. Invariant enforcement status, known phantom invariants, audit queue, and durable findings history. Read before touching security-sensitive code (auth, crypto, Glass Box, boundary, federation, treasury).
 - **`docs/archive/`** — pre-architecture design docs. These predate the current architecture; read critically, not literally.
 - **`.claude/plans/`** — implementation plans from active sessions. If a plan file exists for the current task, it is the authoritative implementation guide.
 - **Recent commits** — `git log --oneline -20` tells you what just landed.
@@ -52,7 +56,7 @@ If something seems undecided, search GitHub before deciding.
 
 3. **Constitutional Core is immutable.** ICA principle checks cannot be overridden by configuration, manifest updates, or runtime flags. Do not add bypass logic.
 
-4. **Tombstone-only lifecycle.** Decisions, attestations, and audit records are never deleted — only marked Tombstoned. Immutability is the audit trail.
+4. **Tombstone-only lifecycle.** Decisions, attestations, and audit records are never deleted — only superceded on the chain. Immutability is the audit trail, references to prior in the new adoption mark them as archived saving tree depth search usage.
 
 5. **Boundary layer is sequential.** Foreign activity ingestion has five gates (Trust Quarantine → Ontology Translation → Governance Verification → Causal Ordering → Glass Box Wrap). Do not skip or reorder.
 
@@ -78,9 +82,9 @@ Design decisions live in GitHub issues and discussions. If you are making an arc
 
 ---
 
-## Model selection
+## Model selection - Critical
 
-Choose model by cost of rework, not cost of tokens. A wrong architectural decision costs more to fix than the tokens saved using a cheaper model.
+Choose model by cost of rework, not cost of tokens. A wrong architectural decision costs more to fix than the tokens saved using a cheaper model. For review tasts, also base on criticality.
 
 **Opus** — use when the task involves:
 - Architectural decisions or design reviews
