@@ -5,6 +5,12 @@ Tables:
   decisions   — Loomio decision outcomes with IPFS CIDs
   glass_box   — Clerk agent action audit trail
   tensions    — Organisational tensions (S3: Navigate Via Tension pattern)
+
+Primary key columns use Integer (maps to SERIAL in Postgres, INTEGER ROWID
+alias in SQLite) so that autoincrement works correctly in both environments.
+Foreign-key-style columns that reference external systems (loomio_poll_id,
+loomio_discussion_id) are kept as BigInteger since they hold externally-
+generated IDs that may exceed 32-bit range.
 """
 from __future__ import annotations
 
@@ -13,11 +19,11 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     BigInteger,
-    Boolean,
     Column,
     Date,
     DateTime,
     Index,
+    Integer,
     String,
     Text,
     create_engine,
@@ -46,7 +52,7 @@ class Decision(Base):
     """A recorded Loomio decision outcome."""
     __tablename__ = "decisions"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     loomio_poll_id = Column(BigInteger, nullable=False, index=True)
     loomio_group_key = Column(String(64), nullable=True, index=True)
     title = Column(Text, nullable=False)
@@ -64,6 +70,15 @@ class Decision(Base):
     review_circle = Column(String(128), nullable=True)   # Loomio group key responsible
     review_status = Column(String(32), nullable=True,    # "pending" | "due" | "complete"
                            default="pending")
+    # Decidim-inspired accountability tracking — was the decision implemented?
+    accountability_status = Column(
+        String(32), nullable=True, default="not_started",
+        # "not_applicable" | "not_started" | "in_progress" |
+        # "implemented" | "not_implemented" | "deferred"
+    )
+    accountability_notes = Column(Text, nullable=True)
+    accountability_updated_at = Column(DateTime(timezone=True), nullable=True)
+    accountability_review_date = Column(Date, nullable=True, index=True)
 
     __table_args__ = (
         Index("ix_decisions_recorded_at", "recorded_at"),
@@ -74,7 +89,7 @@ class GlassBoxEntry(Base):
     """An audit trail entry for a Clerk agent action."""
     __tablename__ = "glass_box"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     actor = Column(String(128), nullable=False, index=True)   # Mattermost user ID
     agent = Column(String(64), nullable=False)                 # e.g. "clerk"
     action = Column(String(256), nullable=False)
@@ -93,8 +108,8 @@ class Tension(Base):
     """
     __tablename__ = "tensions"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
-    logged_by = Column(String(128), nullable=False, index=True)   # Mattermost user ID
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    logged_by = Column(String(128), nullable=False)   # Mattermost user ID; indexed via __table_args__
     description = Column(Text, nullable=False)                     # What the member noticed
     domain = Column(String(128), nullable=True)                    # Circle/group this relates to
     driver_statement = Column(Text, nullable=True)                 # Formatted S3 driver (if drafted)
@@ -107,6 +122,38 @@ class Tension(Base):
     __table_args__ = (
         Index("ix_tensions_logged_by", "logged_by"),
         Index("ix_tensions_status", "status"),
+    )
+
+
+class LabourLog(Base):
+    """
+    DisCO three-value-stream labour record.
+
+    Makes invisible labour visible — care work (onboarding, mediation,
+    governance facilitation) and reproductive work (maintaining docs,
+    processes) are tracked alongside productive (deliverable) work.
+
+    Reference: DisCO Governance Model v3, issue #91.
+    """
+    __tablename__ = "labour_log"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    member_id = Column(String(128), nullable=False)      # Mattermost user ID
+    value_type = Column(String(32), nullable=False)      # productive | reproductive | care | commons
+    task_category = Column(String(128), nullable=False)  # e.g. "governance.facilitation"
+    task_description = Column(Text, nullable=True)
+    hours = Column(String(16), nullable=False)           # decimal string; stored as text to avoid float precision issues
+    timestamp_start = Column(DateTime(timezone=True), nullable=False)
+    timestamp_end = Column(DateTime(timezone=True), nullable=True)
+    logged_at = Column(DateTime(timezone=True), nullable=False,
+                       default=lambda: datetime.now(timezone.utc))
+    loomio_discussion_id = Column(Integer, nullable=True)  # link to governance discussion if relevant
+    notes = Column(Text, nullable=True)
+
+    __table_args__ = (
+        Index("ix_labour_log_member_id", "member_id"),
+        Index("ix_labour_log_value_type", "value_type"),
+        Index("ix_labour_log_logged_at", "logged_at"),
     )
 
 

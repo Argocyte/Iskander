@@ -7,9 +7,14 @@ Endpoints:
   GET  /log                     Glass Box: query audit trail (member-readable)
   GET  /decisions               List recorded decisions
   GET  /decisions/{id}          Single decision with IPFS CID
-  PATCH /decisions/{id}/review  Set review date on an agreement (S3: Evolve Agreements)
-  GET  /decisions/reviews/due   Agreements due for review
-  POST /tensions                Log an organisational tension (S3: Navigate Via Tension)
+  PATCH /decisions/{id}/review         Set review date on an agreement (S3: Evolve Agreements)
+  GET  /decisions/reviews/due          Agreements due for review
+  PATCH /decisions/{id}/accountability Update implementation status (Decidim accountability)
+  GET  /decisions/accountability/overdue Decisions needing accountability follow-up
+  POST /tensions                       Log an organisational tension (S3: Navigate Via Tension)
+  POST /labour                         Log DisCO value-stream labour record
+  GET  /labour                         List labour records (filterable by member/type)
+  GET  /labour/summary                 Total hours by value type (Steward reporting)
   GET  /tensions                List tensions
   PATCH /tensions/{id}          Update tension status / driver statement
   GET  /health                  Service health
@@ -30,8 +35,8 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, sta
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
-from . import ipfs
-from .db import Decision, GlassBoxEntry, SessionLocal, Tension, create_tables, get_db
+import ipfs
+from db import Decision, GlassBoxEntry, LabourLog, SessionLocal, Tension, create_tables, get_db
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
 logger = logging.getLogger("decision-recorder")
@@ -351,9 +356,11 @@ class ReviewUpdateRequest(BaseModel):
     @classmethod
     def parse_date(cls, v: str) -> str:
         try:
-            date.fromisoformat(v)
+            parsed = date.fromisoformat(v)
         except ValueError:
             raise ValueError("review_date must be YYYY-MM-DD")
+        if parsed <= date.today():
+            raise ValueError("review_date must be a future date")
         return v
 
 
@@ -419,6 +426,143 @@ def list_due_reviews(
 
 
 # ---------------------------------------------------------------------------
+# Accountability tracking (Decidim-inspired: was the decision implemented?)
+# ---------------------------------------------------------------------------
+
+_ACCOUNTABILITY_STATUSES = frozenset({
+    "not_applicable",
+    "not_started",
+    "in_progress",
+    "implemented",
+    "not_implemented",
+    "deferred",
+})
+
+
+class AccountabilityUpdateRequest(BaseModel):
+    status: str = Field(
+        ...,
+        description=(
+            "not_applicable | not_started | in_progress | "
+            "implemented | not_implemented | deferred"
+        ),
+    )
+    notes: str | None = Field(None, description="Free-text implementation notes", max_length=4_000)
+    review_date: str | None = Field(None, description="ISO 8601 YYYY-MM-DD for next accountability check")
+    updated_by: str = Field(..., description="Mattermost user ID of the member updating", max_length=128)
+
+    @field_validator("status")
+    @classmethod
+    def valid_status(cls, v: str) -> str:
+        if v not in _ACCOUNTABILITY_STATUSES:
+            raise ValueError(f"status must be one of: {', '.join(sorted(_ACCOUNTABILITY_STATUSES))}")
+        return v
+
+    @field_validator("review_date")
+    @classmethod
+    def future_review_date(cls, v: str | None) -> str | None:
+        if not v:
+            return v
+        try:
+            parsed = date.fromisoformat(v)
+        except ValueError:
+            raise ValueError("review_date must be YYYY-MM-DD")
+        if parsed <= date.today():
+            raise ValueError("review_date must be a future date")
+        return v
+
+
+@app.patch("/decisions/{decision_id}/accountability")
+def update_accountability(
+    decision_id: int,
+    body: AccountabilityUpdateRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    Update the accountability status on a recorded decision.
+
+    Tracks whether the decision was actually implemented — closing the loop
+    between governance outcome and real-world action (Decidim pattern, issue #94).
+    Glass Box logs all changes so any member can audit the accountability trail.
+    """
+    _verify_internal_caller(request)
+    actor_user_id = request.headers.get("X-Actor-User-Id", "")
+    if actor_user_id and body.updated_by != actor_user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="updated_by must match the authenticated actor (X-Actor-User-Id)",
+        )
+
+    d = db.query(Decision).filter(Decision.id == decision_id).first()
+    if not d:
+        raise HTTPException(status_code=404, detail="Decision not found")
+
+    old_status = d.accountability_status
+    d.accountability_status = body.status
+    d.accountability_updated_at = datetime.now(timezone.utc)
+    if body.notes is not None:
+        d.accountability_notes = body.notes
+    if body.review_date is not None:
+        d.accountability_review_date = date.fromisoformat(body.review_date)
+
+    db.commit()
+    logger.info(
+        "Accountability updated by %s: decision=%s %s→%s",
+        body.updated_by, decision_id, old_status, body.status,
+    )
+    return _decision_accountability_summary(d)
+
+
+@app.get("/decisions/accountability/overdue")
+def list_overdue_accountability(
+    request: Request,
+    days_ahead: int = Query(7, ge=1, le=90),
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    List decisions whose accountability_review_date falls within the next N days
+    and are still in an open status (not implemented or not_applicable).
+
+    Used by the Clerk agent for weekly accountability reminders.
+    """
+    client_host = request.client.host if request.client else "unknown"
+    _rate_check(f"decisions:{client_host}", _QUERY_MAX)
+
+    from datetime import timedelta
+    future = date.today() + timedelta(days=days_ahead)
+
+    open_statuses = ("not_started", "in_progress", "deferred")
+    due = (
+        db.query(Decision)
+        .filter(
+            Decision.accountability_review_date.isnot(None),
+            Decision.accountability_review_date <= future,
+            Decision.accountability_status.in_(open_statuses),
+        )
+        .order_by(Decision.accountability_review_date)
+        .all()
+    )
+    return {
+        "count": len(due),
+        "days_ahead": days_ahead,
+        "decisions": [_decision_accountability_summary(d) for d in due],
+    }
+
+
+def _decision_accountability_summary(d: Decision) -> dict:
+    return {
+        "id": d.id,
+        "title": d.title,
+        "accountability_status": d.accountability_status,
+        "accountability_notes": d.accountability_notes,
+        "accountability_review_date": str(d.accountability_review_date) if d.accountability_review_date else None,
+        "accountability_updated_at": d.accountability_updated_at.isoformat() if d.accountability_updated_at else None,
+        "loomio_url": d.loomio_url,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Tension tracking (S3: Navigate Via Tension)
 # ---------------------------------------------------------------------------
 
@@ -451,6 +595,12 @@ def log_tension(
 ) -> dict:
     """Log an organisational tension for structured processing."""
     _verify_internal_caller(request)
+    actor_user_id = request.headers.get("X-Actor-User-Id", "")
+    if actor_user_id and body.logged_by != actor_user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="logged_by must match the authenticated actor (X-Actor-User-Id)",
+        )
     tension = Tension(
         logged_by=body.logged_by,
         description=body.description,
@@ -486,6 +636,9 @@ def list_tensions(
     q = db.query(Tension).order_by(Tension.logged_at.desc())
     if status_filter:
         q = q.filter(Tension.status == status_filter)
+    actor_user_id = request.headers.get("X-Actor-User-Id", "")
+    if actor_user_id:
+        q = q.filter(Tension.logged_by == actor_user_id)
     total = q.count()
     tensions = q.offset(offset).limit(limit).all()
     return {"total": total, "tensions": [_tension_summary(t) for t in tensions]}
@@ -505,6 +658,12 @@ def update_tension(
     Phase B will add a facilitator-override path when circle roles are implemented.
     """
     _verify_internal_caller(request)
+    actor_user_id = request.headers.get("X-Actor-User-Id", "")
+    if actor_user_id and body.updated_by != actor_user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="updated_by must match the authenticated actor (X-Actor-User-Id)",
+        )
     t = db.query(Tension).filter(Tension.id == tension_id).first()
     if not t:
         raise HTTPException(status_code=404, detail="Tension not found")
@@ -523,6 +682,201 @@ def update_tension(
         t.loomio_discussion_id = body.loomio_discussion_id
     db.commit()
     return _tension_summary(t)
+
+
+# ---------------------------------------------------------------------------
+# DisCO labour tracking (three-value-stream: productive, reproductive, care)
+# ---------------------------------------------------------------------------
+
+_LABOUR_VALUE_TYPES = frozenset({"productive", "reproductive", "care", "commons"})
+
+
+class LabourLogRequest(BaseModel):
+    member_id: str = Field(..., description="Mattermost user ID of the contributor", max_length=128)
+    value_type: str = Field(
+        ...,
+        description="productive | reproductive | care | commons",
+    )
+    task_category: str = Field(
+        ...,
+        description="Dot-notation category e.g. governance.facilitation, code.review, onboarding.welcome",
+        max_length=128,
+    )
+    task_description: str | None = Field(None, description="Human-readable description", max_length=2_000)
+    hours: str = Field(
+        ...,
+        description="Decimal hours worked (minimum 0.25 precision), e.g. '1.5' or '0.25'",
+        max_length=16,
+    )
+    timestamp_start: str = Field(..., description="ISO 8601 datetime when work began")
+    timestamp_end: str | None = Field(None, description="ISO 8601 datetime when work ended")
+    loomio_discussion_id: int | None = Field(None, description="Link to governance discussion if relevant")
+    notes: str | None = Field(None, max_length=2_000)
+
+    @field_validator("value_type")
+    @classmethod
+    def valid_value_type(cls, v: str) -> str:
+        if v not in _LABOUR_VALUE_TYPES:
+            raise ValueError(f"value_type must be one of: {', '.join(sorted(_LABOUR_VALUE_TYPES))}")
+        return v
+
+    @field_validator("hours")
+    @classmethod
+    def valid_hours(cls, v: str) -> str:
+        try:
+            h = float(v)
+        except (ValueError, TypeError):
+            raise ValueError("hours must be a decimal number e.g. '1.5'")
+        if h < 0.25:
+            raise ValueError("hours must be at least 0.25 (15 minutes)")
+        if h > 24:
+            raise ValueError("hours cannot exceed 24 for a single record")
+        return v
+
+    @field_validator("timestamp_start")
+    @classmethod
+    def valid_timestamp_start(cls, v: str) -> str:
+        try:
+            datetime.fromisoformat(v.replace("Z", "+00:00"))
+        except (ValueError, AttributeError):
+            raise ValueError("timestamp_start must be ISO 8601 e.g. 2026-04-10T09:00:00+00:00")
+        return v
+
+
+@app.post("/labour", status_code=status.HTTP_201_CREATED)
+def log_labour(
+    body: LabourLogRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    Log a DisCO three-value-stream labour record.
+
+    Makes invisible labour visible — care and reproductive work
+    are recorded alongside productive deliverable work.
+    Glass Box logging is handled by the calling agent (Clerk or Steward).
+    """
+    _verify_internal_caller(request)
+    actor_user_id = request.headers.get("X-Actor-User-Id", "")
+    if actor_user_id and body.member_id != actor_user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="member_id must match the authenticated actor (X-Actor-User-Id)",
+        )
+
+    ts_start = datetime.fromisoformat(body.timestamp_start.replace("Z", "+00:00"))
+    ts_end = None
+    if body.timestamp_end:
+        try:
+            ts_end = datetime.fromisoformat(body.timestamp_end.replace("Z", "+00:00"))
+        except (ValueError, AttributeError):
+            raise HTTPException(status_code=422, detail="timestamp_end must be ISO 8601")
+
+    record = LabourLog(
+        member_id=body.member_id,
+        value_type=body.value_type,
+        task_category=body.task_category,
+        task_description=body.task_description,
+        hours=body.hours,
+        timestamp_start=ts_start,
+        timestamp_end=ts_end,
+        loomio_discussion_id=body.loomio_discussion_id,
+        notes=body.notes,
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    logger.info("Labour logged: %s %s %.2sh by %s", body.value_type, body.task_category, float(body.hours), body.member_id)
+    return _labour_summary(record)
+
+
+@app.get("/labour")
+def list_labour(
+    request: Request,
+    member_id: str | None = Query(None),
+    value_type: str | None = Query(None),
+    limit: int = Query(20, le=100),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    List labour records. Optionally filter by member_id or value_type.
+
+    When X-Actor-User-Id header is present, results are scoped to that member
+    unless an explicit member_id filter is provided.
+    """
+    client_host = request.client.host if request.client else "unknown"
+    _rate_check(f"labour:{client_host}", _QUERY_MAX)
+
+    q = db.query(LabourLog).order_by(LabourLog.logged_at.desc())
+
+    actor_user_id = request.headers.get("X-Actor-User-Id", "")
+    if member_id:
+        q = q.filter(LabourLog.member_id == member_id)
+    elif actor_user_id:
+        q = q.filter(LabourLog.member_id == actor_user_id)
+
+    if value_type:
+        if value_type not in _LABOUR_VALUE_TYPES:
+            raise HTTPException(status_code=422, detail=f"value_type must be one of: {', '.join(sorted(_LABOUR_VALUE_TYPES))}")
+        q = q.filter(LabourLog.value_type == value_type)
+
+    total = q.count()
+    records = q.offset(offset).limit(limit).all()
+    return {"total": total, "records": [_labour_summary(r) for r in records]}
+
+
+@app.get("/labour/summary")
+def labour_summary_by_type(
+    request: Request,
+    member_id: str | None = Query(None),
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    Summarise total hours by value_type for a member or the whole cooperative.
+
+    Used by the Steward agent to surface invisible labour in cooperative reports.
+    """
+    client_host = request.client.host if request.client else "unknown"
+    _rate_check(f"labour:{client_host}", _QUERY_MAX)
+
+    actor_user_id = request.headers.get("X-Actor-User-Id", "")
+    scope_member = member_id or (actor_user_id if not member_id else None)
+
+    q = db.query(LabourLog)
+    if scope_member:
+        q = q.filter(LabourLog.member_id == scope_member)
+
+    records = q.all()
+    totals: dict[str, float] = {"productive": 0.0, "reproductive": 0.0, "care": 0.0, "commons": 0.0}
+    for r in records:
+        totals[r.value_type] = round(totals.get(r.value_type, 0.0) + float(r.hours), 2)
+
+    total_hours = round(sum(totals.values()), 2)
+    care_ratio = round(totals["care"] / total_hours, 3) if total_hours else 0.0
+
+    return {
+        "scope": scope_member or "cooperative",
+        "total_hours": total_hours,
+        "by_type": totals,
+        "care_ratio": care_ratio,  # DisCO health signal: care/total
+        "record_count": len(records),
+    }
+
+
+def _labour_summary(r: LabourLog) -> dict:
+    return {
+        "id": r.id,
+        "member_id": r.member_id,
+        "value_type": r.value_type,
+        "task_category": r.task_category,
+        "task_description": r.task_description,
+        "hours": r.hours,
+        "timestamp_start": r.timestamp_start.isoformat(),
+        "timestamp_end": r.timestamp_end.isoformat() if r.timestamp_end else None,
+        "loomio_discussion_id": r.loomio_discussion_id,
+        "logged_at": r.logged_at.isoformat(),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -570,6 +924,8 @@ def _decision_summary(d: Decision) -> dict:
         "loomio_url": d.loomio_url,
         "decided_at": d.decided_at.isoformat() if d.decided_at else None,
         "recorded_at": d.recorded_at.isoformat(),
+        "accountability_status": d.accountability_status,
+        "accountability_review_date": str(d.accountability_review_date) if d.accountability_review_date else None,
     }
 
 

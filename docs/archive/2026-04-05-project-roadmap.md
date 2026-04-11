@@ -1009,11 +1009,13 @@ Before creating a Loomio proposal, the governance router optionally creates a Po
 ```
 governance_router.create_proposal()
     → if polis_enabled: create_polis_conversation() → wait 24h
-    → if polis_consensus_rate > 0.85: skip Loomio (auto-approve)
-    → else: create_loomio_poll() [Sprint 2 path]
+    → summarise Polis consensus for Loomio context (NEVER skip Loomio)
+    → create_loomio_poll() [always — Polis informs, Loomio decides]
 ```
 
-This reduces deliberation fatigue for uncontroversial decisions.
+High Polis consensus speeds up Loomio deliberation but does not substitute
+for formal member consent. Auto-approve bypasses democratic control (ICA P2)
+and is explicitly prohibited. See issue #92.
 
 ### File Map (summary)
 
