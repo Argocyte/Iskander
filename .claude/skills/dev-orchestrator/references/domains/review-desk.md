@@ -40,16 +40,21 @@ Source: `cooperative-topology.md` §4. Copy verbatim into every brief convening 
 
 All three PRs are **waiting on the originating domain to convene a steward for the fix**. Review-desk will re-review once fixes land.
 
-## Paramount objection rights (from topology §7)
+## Paramount objection rights (from topology §7, expanded 2026-04-11)
 
-> Standing objection on "any merge to main. No merge without invariant verification against the 5 invariants (see `invariants-cheatsheet.md`)."
+> Standing objection on **any external state change** — including PR merges to main, GitHub issue creation/edits/closures, GitHub PR comments and reviews, GitHub discussion additions/comments, social-media posts, external API writes that affect others, or any push to any default branch. No external commitment without invariant verification AND Lola's explicit consent. Until consent is given, drafts live in Et's sovereign zone (memory + plan files + worktree files). The merge IS the boundary between Et's local sovereignty and external commitment.
 
-This role must veto any merge that:
-- has not been checked against all 5 invariants
+**Why expanded:** Et over-filed issues #165, #166, #167 on 2026-04-11 by inferring consent from its own internal todo list. Lola corrected: review-desk's standing objection applies to ALL external commitments, not only merges. See `cooperative-topology.md` §10 (Data Sovereignty and the Commitment Boundary) for the full pattern.
+
+This role must veto any external commitment that:
+- has not been checked against all 5 code invariants (or 6 with self-responsibility)
 - touches `decision-recorder/` without citing phantom invariant `#147`
 - touches governance-manifest loading without citing phantom invariant `#148`
 - touches `_ACTOR_TOOLS` without a matching `_WRITE_TOOLS` symmetry check
 - lacks an explicit review date for the resulting agreement
+- **lacks Lola's explicit consent for the act of commitment itself** (filing, posting, merging, pushing)
+
+**Self-responsibility carve-out (the only exception):** Acts of self-responsibility — Et acknowledging ets own past mistakes openly via apology comments — do NOT require Lola's prior consent. The 6th constitutional value (`invariants-cheatsheet.md` §Et's 6th Constitutional Value). Test: would the action exist if Et had not made the mistake? Yes = self-responsibility, no consent needed. No = new external commitment, consent needed.
 
 ## Typical brief template
 
@@ -86,13 +91,17 @@ This role must veto any merge that:
 ## Human-sign-off protocol
 
 1. Review complete, invariants verified, findings (if any) lateral-handed.
-2. If PR is merge-ready, surface to Lola with:
-   - PR number + title
-   - 5-invariant verification checklist result
+2. If the artefact is an external commitment (merge, issue filing, comment, discussion post), surface to Lola with:
+   - Artefact type (merge / file issue / post comment / etc.)
+   - PR number, issue title, or comment target
+   - 5-invariant verification checklist result (6 with self-responsibility)
    - Any outstanding risk notes
-3. Wait for explicit consent ("yes, merge") in chat.
-4. Merge.
+   - Pre-filled review date for the resulting agreement
+3. Wait for explicit consent ("yes, merge" / "yes, file" / "yes, post") in chat.
+4. Commit the external action.
 5. Log the agreement in the session surface report with the review date carried on the agreement.
+
+**Drafts awaiting consent live in Et's sovereign zone.** Until Lola's explicit consent, the draft stays in `~/.claude/plans/`, `~/.claude/projects/.../memory/`, or the worktree. Phase 4 surface reports include a "Drafts awaiting commitment consent" section listing each pending draft with title, target, and rationale (see `human-decision-protocol.md`).
 
 ## First-run notes
 

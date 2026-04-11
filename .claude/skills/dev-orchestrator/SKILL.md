@@ -232,15 +232,26 @@ facilitator proposes an integration, and the group checks for paramount objectio
 
 ## Phase 4 — Roll-up (Surface to Lola)
 
-The surface report renders at Phase 4 with six sections: **Done** (agreements with
+The surface report renders at Phase 4 with seven sections: **Done** (agreements with
 review dates), **Blockers** (gate-blocked drivers), **Decisions needed** (Tier A),
-**Halts** (Tier B — paramount objection active), **Lateral handoffs** (cross-domain
-tensions queued for next iteration), and **Failures**.
+**Drafts awaiting commitment consent** (Tier A* — added 2026-04-11), **Halts**
+(Tier B — paramount objection active), **Lateral handoffs** (cross-domain tensions
+queued for next iteration), and **Failures**.
 
-Surface formats for Tier A and Tier B are in `references/human-decision-protocol.md`.
+Surface formats for Tier A, Tier A*, and Tier B are in `references/human-decision-protocol.md`.
 Tier A queues; the session cooperative continues other drivers while Lola considers.
+**Tier A*** is the new section for any artefact Et has drafted that would result in an
+external state change (issue body, PR comment, discussion post, push) but has not yet
+been committed. Per `references/cooperative-topology.md` §10 (Data Sovereignty), every
+such draft requires Lola's explicit consent before it crosses the commitment boundary.
+Drafts live in Et's sovereign zone (memory + plan + worktree files) until consented.
 Tier B halts the relevant convening immediately — not at Phase 4, immediately when
 raised. Only the objecting role can lift a Tier B halt. The orchestrator cannot.
+
+**Self-responsibility carve-out:** apology comments and corrective notes for Et's own
+past mistakes do NOT pass through Tier A* — they are the 6th constitutional invariant
+(see `references/invariants-cheatsheet.md`) and Et commits them directly, without prior
+consent, in the place where the mistake was made.
 
 ---
 
@@ -285,6 +296,7 @@ Primary drivers sourced from `references/cooperative-topology.md` §4.
 3. Constitutional Core is immutable — no bypass for ICA principle checks
 4. Tombstone-only lifecycle — mark tombstoned, never DELETE
 5. Boundary layer sequential — 5 gates in order: Trust → Ontology → Governance → Causal → GBWrap
+6. Self-responsibility — own ets mistakes openly without prior consent; mistakes stay on record
 
 If any change would weaken, bypass, or reorder one of these, STOP and surface it.
 Phantom invariants currently tracked: #147 (tombstone in decision-recorder),
@@ -294,6 +306,17 @@ Phantom invariants currently tracked: #147 (tombstone in decision-recorder),
 - [ ] Did this change touch a Glass Box gate, a signing path, a principle check,
       a delete path, or the boundary layer?
 - [ ] If yes — which invariant(s), and how is the change consistent with them?
+
+## Data sovereignty rule (review-desk paramount objection scope, 2026-04-11)
+External state changes (PR merges, issue filings, GitHub comments, discussions, posts,
+external API writes) REQUIRE Lola's explicit consent. Drafts live in Et's sovereign
+zone (memory + plan files + worktree files) until consent is given. The merge IS the
+boundary between Et's local sovereignty and external commitment.
+
+EXCEPTION (self-responsibility carve-out): apology comments and corrective notes for
+Et's own past mistakes do NOT need prior consent. Test: would the action exist if Et
+had not made the mistake? Yes = self-responsibility (no consent needed). No = new
+external commitment (consent needed). See `cooperative-topology.md` §10.
 
 ## S3 vocabulary
 Don't say: manager / task / assign / dispatch to / queue / worker / report to
@@ -330,8 +353,9 @@ The convening loop stops when any of the following occurs:
   to stop.
 - **Worktree conflicts cannot be resolved** — two stewards need the same worktree and
   neither can proceed without the other; wave planner cannot serialise them.
-- **All remaining drivers are Tier A** — every unblocked driver needs human consent
-  before a steward can be convened; surface them all and stop.
+- **All remaining drivers are Tier A or Tier A*** — every unblocked driver needs human
+  consent before a steward can be convened, OR every drafted artefact awaits commitment
+  consent; surface them all and stop.
 
 ---
 
@@ -346,6 +370,16 @@ session's model. Inheritance is a budget trap and undermines deliberate escalati
 **"Letting the orchestrator decide merging policy"** — merges are review-desk's
 paramount objection. The orchestrator cannot proceed without review-desk accepting the
 merge driver.
+
+**"Filing an issue / posting a comment / opening a discussion without explicit consent"**
+— review-desk's paramount objection scope is **all external state changes**, not only
+merges (`cooperative-topology.md` §7, expanded 2026-04-11 after Et over-filed #165/#166/
+#167). Drafts live in Et's sovereign zone (memory + plan + worktree) until Lola
+consents per draft or per batch. The convening pattern: draft → surface in Phase 4
+under "Tier A* — Drafts awaiting commitment consent" → wait for explicit "yes, file" →
+then commit. The merge IS the boundary; everything before it is sovereign, everything
+after is committed. The only carve-out is self-responsibility (the 6th invariant) —
+apologies for Et's own past mistakes commit directly without prior consent.
 
 **"Writing code in the main Iskander/ checkout"** — always target a worktree.
 See `references/worktree-lifecycle.md`.

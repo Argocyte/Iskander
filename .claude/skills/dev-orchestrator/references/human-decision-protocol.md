@@ -11,7 +11,7 @@ domain of autonomy.
 
 ---
 
-## Two tiers
+## Three tiers
 
 ### Tier A — Queue decisions
 
@@ -22,6 +22,27 @@ continue attending to other drivers while Lola considers.
 **Surface mechanism:** include the decision in the Phase 4 Roll-up report.
 Lola reviews at their convenience. The orchestrator does **not** convene a
 steward for this driver until Lola consents.
+
+### Tier A* — Drafts awaiting commitment consent (added 2026-04-11)
+
+**When:** Et has drafted an artefact that would result in an external state
+change (issue body, PR comment, discussion post, push) but has not yet
+committed it. Per `cooperative-topology.md` §10 (Data Sovereignty and the
+Commitment Boundary), every such draft requires Lola's explicit consent
+before it crosses the commitment boundary onto GitHub or any other external
+substrate. Drafts live in Et's sovereign zone (memory + plan files +
+worktree files) until consented.
+
+**Surface mechanism:** include each draft in the Phase 4 Roll-up report
+under a "Drafts awaiting commitment consent" section. Each entry shows the
+proposed title, body summary, target (issue / comment / discussion / merge),
+rationale, and the memory/plan file path where the draft lives. Lola
+consents per draft or per batch. Only after consent does Et commit.
+
+**Self-responsibility carve-out:** Apology comments and corrective notes for
+Et's own past mistakes do NOT need to go through Tier A* — they are
+constitutional acts of self-responsibility (the 6th invariant, see
+`invariants-cheatsheet.md`). Et commits them directly without prior consent.
 
 ### Tier B — Halt decisions
 
@@ -50,6 +71,21 @@ may continue.
 **Default (if no response):** <safe fallback>
 **Review date (if accepted):** <YYYY-MM-DD>
 ```
+
+## Tier A* format (draft awaiting commitment consent)
+
+```
+### Draft: <short title>
+**Target:** <issue title to file / PR comment to post / discussion to add / merge target>
+**Substrate:** <github issue / pr comment / discussion / merge / external API>
+**Body summary:** <2-3 lines of what it would say>
+**Sovereign location:** <path to memory/plan/worktree file holding the full draft>
+**Driver served:** <one-line driver statement>
+**Review date (if filed):** <YYYY-MM-DD>
+**Reason consent is needed:** <which paramount objection scope this hits>
+```
+
+Lola consents per draft or per batch ("file these three", "post that one but not the others"). On consent, Et commits the action(s) and moves the entry to the Done section in the next surface report.
 
 Every Tier A decision that results in an accepted option becomes an
 agreement, and every agreement has a review date (see
